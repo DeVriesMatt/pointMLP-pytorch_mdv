@@ -1,0 +1,2 @@
+args: Namespace(batch_size=32, checkpoint='checkpoints/PointNet-20220302160203-5411', epoch=300, learning_rate=0.1, min_lr=0.005, model='PointNet', msg=None, num_points=1024, seed=5411, weight_decay=0.0002, workers=8)
+==> Building model..

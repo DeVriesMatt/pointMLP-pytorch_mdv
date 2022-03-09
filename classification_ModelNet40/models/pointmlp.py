@@ -344,10 +344,8 @@ class Model(nn.Module):
         return x
 
 
-
-
 def pointMLP(num_classes=40, **kwargs) -> Model:
-    return Model(points=1024, class_num=num_classes, embed_dim=64, groups=1, res_expansion=1.0,
+    return Model(points=2048, class_num=num_classes, embed_dim=64, groups=1, res_expansion=1.0,
                    activation="relu", bias=False, use_xyz=False, normalize="anchor",
                    dim_expansion=[2, 2, 2, 2], pre_blocks=[2, 2, 2, 2], pos_blocks=[2, 2, 2, 2],
                    k_neighbors=[24, 24, 24, 24], reducers=[2, 2, 2, 2], **kwargs)
@@ -359,10 +357,11 @@ def pointMLPElite(num_classes=40, **kwargs) -> Model:
                    dim_expansion=[2, 2, 2, 1], pre_blocks=[1, 1, 2, 1], pos_blocks=[1, 1, 2, 1],
                    k_neighbors=[24,24,24,24], reducers=[2, 2, 2, 2], **kwargs)
 
+
 if __name__ == '__main__':
-    data = torch.rand(2, 3, 1024)
+    data = torch.rand(2, 3, 2048).cuda()
     print("===> testing pointMLP ...")
-    model = pointMLP()
+    model = pointMLP().cuda()
     out = model(data)
     print(out.shape)
 
