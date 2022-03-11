@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
     batch_size = 16
     learning_rate = 0.00001
-    dataset = PointCloudDatasetAllBoth(
+    dataset = PointCloudDatasetAllBothNotSpec(
         df,
         root_dir,
         transform=None,
