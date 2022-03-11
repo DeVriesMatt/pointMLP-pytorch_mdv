@@ -4,7 +4,7 @@ import classification_ModelNet40.models as models
 import torch.backends.cudnn as cudnn
 from classification_ModelNet40.models import pointMLP
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import numpy as np
 import pandas as pd
 from foldingnet import ReconstructionNet, ChamferLoss
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     pmlp_ckpt_path = args.pmlp_ckpt_path
 
     name_net = output_path + "pointmlp_classifier"
-    print("==> Building encoder...")
+    print("==> Building classifier...")
     net = pointMLP()
     device = "cuda"
     net = net.to(device)
@@ -61,8 +61,14 @@ if __name__ == "__main__":
         centring_only=True,
         cell_component="cell",
     )
+    train_size = int(np.round(len(dataset) * 0.8))
+    test_size = int(len(dataset) - train_size)
 
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    train, valid = random_split(dataset, [train_size, test_size])
+
+    dataloader_train = DataLoader(train, batch_size=batch_size, shuffle=True)
+    dataloader_valid = DataLoader(valid, batch_size=1, shuffle=True)
+
     optimizer = torch.optim.Adam(
         filter(lambda p: p.requires_grad, net.module.parameters()),
         lr=learning_rate * 16 / batch_size,
@@ -84,68 +90,83 @@ if __name__ == "__main__":
     niter = 1
     for epoch in range(num_epochs):
         batch_num = 1
-        running_loss = 0.0
+        train_loss = 0.0
         print("Training epoch {}".format(epoch))
         net.train()
         batches = []
-
-        for i, data in enumerate(dataloader, 0):
+        for i, data in enumerate(dataloader_train, 0):
             inputs, labels, _ = data
             inputs = inputs.to(device)
-            labels = labels.to(device)
+            labels = labels.unsqueeze(1).type(torch.cuda.FloatTensor).to(device)
             # ===================forward=====================
             with torch.set_grad_enabled(True):
                 output = net(inputs.permute(0, 2, 1))
                 optimizer.zero_grad()
-                loss = criterion(output, labels)
-                acc = (output.reshape(-1).detach().cpu().numpy().round() == labels).mean()
-                # ===================backward====================
+                loss = criterion(output.type(torch.cuda.FloatTensor), 
+                                 labels)
+                acc = (torch.sigmoid(output).reshape(-1).detach().cpu().numpy().round() == labels.reshape(
+                    -1
+                ).detach().cpu().numpy().round()).mean()
+                # ===================backward===================
                 loss.backward()
                 optimizer.step()
 
-            running_loss += loss.detach().item() / batch_size
+            train_loss += loss.detach().item() / batch_size
             batch_num += 1
             niter += 1
 
             lr = np.asarray(optimizer.param_groups[0]["lr"])
             if i % 10 == 0:
                 print(
-                    "[%d/%d][%d/%d]\tLossTot: %.4f\tAcc: %.4f"
+                    "[%d/%d][%d/%d]\tTrain loss: %.4f\t Train Acc: %.4f"
                     % (
                         epoch,
                         num_epochs,
                         i,
-                        len(dataloader),
+                        len(dataloader_train),
                         loss.detach().item() / batch_size,
                         acc,
                     )
                 )
 
-        # ===================log========================
-        total_loss = running_loss / len(dataloader)
-        if total_loss < best_loss:
+        net.eval()
+        valid_loss = 0.0
+        for i, data in enumerate(dataloader_valid, 0):
+            inputs, labels, _ = data
+            inputs = inputs.to(device)
+            labels = labels.unsqueeze(1).type(
+                torch.cuda.FloatTensor
+            ).to(device)
+            # ===================forward=====================
+            with torch.set_grad_enabled(True):
+                output = net(inputs.permute(0, 2, 1))
+                loss = criterion(output.type(torch.cuda.FloatTensor),
+                                 labels)
+                acc = (torch.sigmoid(output).reshape(-1).detach().cpu().numpy().round() == labels.reshape(
+                    -1).detach().cpu().numpy().round()).mean()
+
+            valid_loss += loss.detach().item()
+            
+        print(
+            f'Epoch {epoch} \t'
+            f'\t Training Loss: {train_loss / len(dataloader_train)} \t'
+            f'\t Validation Loss: {valid_loss / len(dataloader_valid)}')
+        if valid_loss < best_loss:
             checkpoint = {
                 "model_state_dict": net.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "epoch": epoch,
                 "loss": total_loss,
             }
-            best_loss = total_loss
+            best_loss = valid_loss
             create_dir_if_not_exist(output_dir)
             print(
                 "Saving model to:"
                 + name_net
                 + ".pt"
-                + " with loss = {}".format(total_loss)
+                + " with loss = {}".format(valid_loss)
                 + " at epoch {}".format(epoch)
             )
             torch.save(checkpoint, name_net + ".pt")
-            print("epoch [{}/{}], loss:{}".format(epoch + 1, num_epochs, total_loss))
-
-        print(
-            "epoch [{}/{}], loss:{:.4f}, Rec loss:{:.4f}".format(
-                epoch + 1, num_epochs, total_loss, total_loss
-            )
-        )
 
 

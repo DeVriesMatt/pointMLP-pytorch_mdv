@@ -174,10 +174,12 @@ class PointCloudDatasetAllBoth(Dataset):
         self.proximal = proximal
 
         self.new_df = self.annot_df[
-            (self.annot_df.xDim <= self.img_size)
-            & (self.annot_df.yDim <= self.img_size)
-            & (self.annot_df.zDim <= self.img_size)
-        ].reset_index(drop=True)
+            (self.annot_df.xDim <= self.img_size) &
+            (self.annot_df.yDim <= self.img_size) &
+            (self.annot_df.zDim <= self.img_size) &
+            ((self.annot_df.Treatment == 'Nocodazole') |
+             (self.annot_df.Treatment == 'Blebbistatin')) &
+            (self.annot_df.Proximal == self.proximal)].reset_index(drop=True)
 
         # encode label
         le = LabelEncoder()
