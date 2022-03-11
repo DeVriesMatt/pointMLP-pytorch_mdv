@@ -64,8 +64,12 @@ if __name__ == "__main__":
     checkpoint_path = pmlp_ckpt_path
     checkpoint = torch.load(checkpoint_path)
     net.load_state_dict(checkpoint["net"])
+    for param in net.module.parameters():
+        param.requires_grad = False
     new_embedding = nn.Linear(in_features=256, out_features=50, bias=True)
     net.module.classifier[8] = new_embedding
+    net.module.classifier[8].weight.requires_grad = True
+    net.module.classifier[8].bias.requires_grad = True
     print(net.module.classifier)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -105,7 +109,7 @@ if __name__ == "__main__":
 
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer = torch.optim.Adam(
-        model.parameters(),
+        filter(lambda p: p.requires_grad, model.parameters()),
         lr=learning_rate * 16 / batch_size,
         betas=(0.9, 0.999),
         weight_decay=1e-6,

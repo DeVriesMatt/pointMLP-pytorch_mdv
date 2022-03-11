@@ -4,6 +4,7 @@ from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 import os
 from pyntcloud import PyntCloud
+import numpy as np
 
 
 class PointCloudDataset(Dataset):
