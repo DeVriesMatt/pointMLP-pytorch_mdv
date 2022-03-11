@@ -11,6 +11,7 @@ import pandas as pd
 from foldingnet import ReconstructionNet, ChamferLoss
 from dataset import PointCloudDatasetAllBoth
 import argparse
+import os
 
 
 class MLPAutoencoder(nn.Module):
