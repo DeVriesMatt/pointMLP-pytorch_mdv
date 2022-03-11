@@ -164,7 +164,7 @@ if __name__ == "__main__":
                 "loss": total_loss,
             }
             best_loss = valid_loss
-            create_dir_if_not_exist(output_dir)
+            create_dir_if_not_exist(output_path)
             print(
                 "Saving model to:"
                 + name_net
