@@ -97,7 +97,7 @@ if __name__ == "__main__":
             with torch.set_grad_enabled(True):
                 output = net(inputs.permute(0, 2, 1))
                 optimizer.zero_grad()
-                loss = criterion(outputs, labels)
+                loss = criterion(output, labels)
                 acc = (output.reshape(-1).detach().cpu().numpy().round() == labels).mean()
                 # ===================backward====================
                 loss.backward()
