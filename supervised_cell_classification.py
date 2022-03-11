@@ -28,7 +28,7 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     pmlp_ckpt_path = args.pmlp_ckpt_path
 
-    name_net = output_path + "pointmlp_folding_autoencoder"
+    name_net = output_path + "pointmlp_classifier"
     print("==> Building encoder...")
     net = pointMLP()
     device = "cuda"
