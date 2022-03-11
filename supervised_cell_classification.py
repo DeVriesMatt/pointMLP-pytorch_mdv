@@ -12,6 +12,11 @@ from dataset import PointCloudDatasetAllBoth
 import argparse
 
 
+def create_dir_if_not_exist(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+        
+        
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Pointmlp-foldingnet")
