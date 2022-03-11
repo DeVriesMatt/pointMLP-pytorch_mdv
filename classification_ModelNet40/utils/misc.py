@@ -1,8 +1,8 @@
-'''Some helper functions for PyTorch, including:
+"""Some helper functions for PyTorch, including:
     - get_mean_and_std: calculate the mean and std value of dataset.
     - msr_init: net parameter initialization.
     - progress_bar: progress bar mimic xlua.progress.
-'''
+"""
 import errno
 import os
 import sys
@@ -19,30 +19,43 @@ import torch.nn as nn
 import torch.nn.init as init
 from torch.autograd import Variable
 
-__all__ = ['get_mean_and_std', 'init_params', 'mkdir_p', 'AverageMeter',
-           'progress_bar','save_model',"save_args","set_seed", "IOStream", "cal_loss"]
+__all__ = [
+    "get_mean_and_std",
+    "init_params",
+    "mkdir_p",
+    "AverageMeter",
+    "progress_bar",
+    "save_model",
+    "save_args",
+    "set_seed",
+    "IOStream",
+    "cal_loss",
+]
 
 
 def get_mean_and_std(dataset):
-    '''Compute the mean and std value of dataset.'''
-    dataloader = trainloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=2)
+    """Compute the mean and std value of dataset."""
+    dataloader = trainloader = torch.utils.data.DataLoader(
+        dataset, batch_size=1, shuffle=True, num_workers=2
+    )
 
     mean = torch.zeros(3)
     std = torch.zeros(3)
-    print('==> Computing mean and std..')
+    print("==> Computing mean and std..")
     for inputs, targets in dataloader:
         for i in range(3):
-            mean[i] += inputs[:,i,:,:].mean()
-            std[i] += inputs[:,i,:,:].std()
+            mean[i] += inputs[:, i, :, :].mean()
+            std[i] += inputs[:, i, :, :].std()
     mean.div_(len(dataset))
     std.div_(len(dataset))
     return mean, std
 
+
 def init_params(net):
-    '''Init layer parameters.'''
+    """Init layer parameters."""
     for m in net.modules():
         if isinstance(m, nn.Conv2d):
-            init.kaiming_normal(m.weight, mode='fan_out')
+            init.kaiming_normal(m.weight, mode="fan_out")
             if m.bias:
                 init.constant(m.bias, 0)
         elif isinstance(m, nn.BatchNorm2d):
@@ -53,8 +66,9 @@ def init_params(net):
             if m.bias:
                 init.constant(m.bias, 0)
 
+
 def mkdir_p(path):
-    '''make dir if not exist'''
+    """make dir if not exist"""
     try:
         os.makedirs(path)
     except OSError as exc:  # Python >2.5
@@ -63,10 +77,12 @@ def mkdir_p(path):
         else:
             raise
 
+
 class AverageMeter(object):
     """Computes and stores the average and current value
        Imported from https://github.com/pytorch/examples/blob/master/imagenet/main.py#L247-L262
     """
+
     def __init__(self):
         self.reset()
 
@@ -83,25 +99,26 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-
-TOTAL_BAR_LENGTH = 65.
+TOTAL_BAR_LENGTH = 65.0
 last_time = time.time()
 begin_time = last_time
+
+
 def progress_bar(current, total, msg=None):
     global last_time, begin_time
     if current == 0:
         begin_time = time.time()  # Reset for new bar.
 
-    cur_len = int(TOTAL_BAR_LENGTH*current/total)
+    cur_len = int(TOTAL_BAR_LENGTH * current / total)
     rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1
 
-    sys.stdout.write(' [')
+    sys.stdout.write(" [")
     for i in range(cur_len):
-        sys.stdout.write('=')
-    sys.stdout.write('>')
+        sys.stdout.write("=")
+    sys.stdout.write(">")
     for i in range(rest_len):
-        sys.stdout.write('.')
-    sys.stdout.write(']')
+        sys.stdout.write(".")
+    sys.stdout.write("]")
 
     cur_time = time.time()
     step_time = cur_time - last_time
@@ -109,12 +126,12 @@ def progress_bar(current, total, msg=None):
     tot_time = cur_time - begin_time
 
     L = []
-    L.append('  Step: %s' % format_time(step_time))
-    L.append(' | Tot: %s' % format_time(tot_time))
+    L.append("  Step: %s" % format_time(step_time))
+    L.append(" | Tot: %s" % format_time(tot_time))
     if msg:
-        L.append(' | ' + msg)
+        L.append(" | " + msg)
 
-    msg = ''.join(L)
+    msg = "".join(L)
     sys.stdout.write(msg)
     # for i in range(term_width-int(TOTAL_BAR_LENGTH)-len(msg)-3):
     #     sys.stdout.write(' ')
@@ -122,76 +139,70 @@ def progress_bar(current, total, msg=None):
     # Go back to the center of the bar.
     # for i in range(term_width-int(TOTAL_BAR_LENGTH/2)+2):
     #     sys.stdout.write('\b')
-    sys.stdout.write(' %d/%d ' % (current+1, total))
+    sys.stdout.write(" %d/%d " % (current + 1, total))
 
-    if current < total-1:
-        sys.stdout.write('\r')
+    if current < total - 1:
+        sys.stdout.write("\r")
     else:
-        sys.stdout.write('\n')
+        sys.stdout.write("\n")
     sys.stdout.flush()
 
 
 def format_time(seconds):
-    days = int(seconds / 3600/24)
-    seconds = seconds - days*3600*24
+    days = int(seconds / 3600 / 24)
+    seconds = seconds - days * 3600 * 24
     hours = int(seconds / 3600)
-    seconds = seconds - hours*3600
+    seconds = seconds - hours * 3600
     minutes = int(seconds / 60)
-    seconds = seconds - minutes*60
+    seconds = seconds - minutes * 60
     secondsf = int(seconds)
     seconds = seconds - secondsf
-    millis = int(seconds*1000)
+    millis = int(seconds * 1000)
 
-    f = ''
+    f = ""
     i = 1
     if days > 0:
-        f += str(days) + 'D'
+        f += str(days) + "D"
         i += 1
     if hours > 0 and i <= 2:
-        f += str(hours) + 'h'
+        f += str(hours) + "h"
         i += 1
     if minutes > 0 and i <= 2:
-        f += str(minutes) + 'm'
+        f += str(minutes) + "m"
         i += 1
     if secondsf > 0 and i <= 2:
-        f += str(secondsf) + 's'
+        f += str(secondsf) + "s"
         i += 1
     if millis > 0 and i <= 2:
-        f += str(millis) + 'ms'
+        f += str(millis) + "ms"
         i += 1
-    if f == '':
-        f = '0ms'
+    if f == "":
+        f = "0ms"
     return f
 
 
 def save_model(net, epoch, path, acc, is_best, **kwargs):
-    state = {
-        'net': net.state_dict(),
-        'epoch': epoch,
-        'acc': acc
-    }
+    state = {"net": net.state_dict(), "epoch": epoch, "acc": acc}
     for key, value in kwargs.items():
         state[key] = value
     filepath = os.path.join(path, "last_checkpoint.pth")
     torch.save(state, filepath)
     if is_best:
-        shutil.copyfile(filepath, os.path.join(path, 'best_checkpoint.pth'))
-
+        shutil.copyfile(filepath, os.path.join(path, "best_checkpoint.pth"))
 
 
 def save_args(args):
-    file = open(os.path.join(args.checkpoint, 'args.txt'), "w")
+    file = open(os.path.join(args.checkpoint, "args.txt"), "w")
     for k, v in vars(args).items():
         file.write(f"{k}:\t {v}\n")
     file.close()
-
 
 
 def set_seed(seed=None):
     if seed is None:
         return
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = ("%s" % seed)
+    os.environ["PYTHONHASHSEED"] = "%s" % seed
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -200,15 +211,14 @@ def set_seed(seed=None):
     torch.backends.cudnn.deterministic = True
 
 
-
 # create a file and write the text into it
-class IOStream():
+class IOStream:
     def __init__(self, path):
-        self.f = open(path, 'a')
+        self.f = open(path, "a")
 
     def cprint(self, text):
         print(text)
-        self.f.write(text+'\n')
+        self.f.write(text + "\n")
         self.f.flush()
 
     def close(self):
@@ -216,7 +226,7 @@ class IOStream():
 
 
 def cal_loss(pred, gold, smoothing=True):
-    ''' Calculate cross entropy loss, apply label smoothing if needed. '''
+    """ Calculate cross entropy loss, apply label smoothing if needed. """
 
     gold = gold.contiguous().view(-1)
 
@@ -230,6 +240,6 @@ def cal_loss(pred, gold, smoothing=True):
 
         loss = -(one_hot * log_prb).sum(dim=1).mean()
     else:
-        loss = F.cross_entropy(pred, gold, reduction='mean')
+        loss = F.cross_entropy(pred, gold, reduction="mean")
 
     return loss

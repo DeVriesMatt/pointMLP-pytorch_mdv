@@ -7,13 +7,12 @@ import itertools
 
 
 class Flatten(nn.Module):
-
     def forward(self, input):
-        '''
+        """
         Note that input.size(0) is usually the batch size.
         So what it does is that given any input with input.size(0) # of batches,
         will flatten to be 1 * nb_elements.
-        '''
+        """
         batch_size = input.size(0)
         out = input.view(batch_size, -1)
         return out  # (batch_size, *size)
@@ -32,7 +31,10 @@ def knn(x, k):
     if idx.get_device() == -1:
         idx_base = torch.arange(0, batch_size).view(-1, 1, 1) * num_points
     else:
-        idx_base = torch.arange(0, batch_size, device=idx.get_device()).view(-1, 1, 1) * num_points
+        idx_base = (
+            torch.arange(0, batch_size, device=idx.get_device()).view(-1, 1, 1)
+            * num_points
+        )
     idx = idx + idx_base
     idx = idx.view(-1)
 
@@ -50,8 +52,9 @@ def local_cov(pts, idx):
     x = x.view(batch_size * num_points, -1)[idx, :]  # (batch_size*num_points*2, 3)
     x = x.view(batch_size, num_points, -1, num_dims)  # (batch_size, num_points, k, 3)
 
-    x = torch.matmul(x[:, :, 0].unsqueeze(3), x[:, :, 1].unsqueeze(
-        2))  # (batch_size, num_points, 3, 1) * (batch_size, num_points, 1, 3) -> (batch_size, num_points, 3, 3)
+    x = torch.matmul(
+        x[:, :, 0].unsqueeze(3), x[:, :, 1].unsqueeze(2)
+    )  # (batch_size, num_points, 3, 1) * (batch_size, num_points, 1, 3) -> (batch_size, num_points, 3, 3)
     # x = torch.matmul(x[:,:,1:].transpose(3, 2), x[:,:,1:])
     x = x.view(batch_size, num_points, 9).transpose(2, 1)  # (batch_size, 9, num_points)
 
@@ -68,8 +71,12 @@ def local_maxpool(x, idx):
     _, num_dims, _ = x.size()
 
     x = x.transpose(2, 1).contiguous()  # (batch_size, num_points, num_dims)
-    x = x.view(batch_size * num_points, -1)[idx, :]  # (batch_size*n, num_dims) -> (batch_size*n*k, num_dims)
-    x = x.view(batch_size, num_points, -1, num_dims)  # (batch_size, num_points, k, num_dims)
+    x = x.view(batch_size * num_points, -1)[
+        idx, :
+    ]  # (batch_size*n, num_dims) -> (batch_size*n*k, num_dims)
+    x = x.view(
+        batch_size, num_points, -1, num_dims
+    )  # (batch_size, num_points, k, num_dims)
     x, _ = torch.max(x, dim=2)  # (batch_size, num_points, num_dims)
 
     return x
@@ -85,12 +92,19 @@ def get_graph_feature(x, k=20, idx=None):
     _, num_dims, _ = x.size()
 
     x = x.transpose(2, 1).contiguous()  # (batch_size, num_points, num_dims)
-    feature = x.view(batch_size * num_points, -1)[idx, :]  # (batch_size*n, num_dims) -> (batch_size*n*k, num_dims)
-    feature = feature.view(batch_size, num_points, k, num_dims)  # (batch_size, num_points, k, num_dims)
-    x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)  # (batch_size, num_points, k, num_dims)
+    feature = x.view(batch_size * num_points, -1)[
+        idx, :
+    ]  # (batch_size*n, num_dims) -> (batch_size*n*k, num_dims)
+    feature = feature.view(
+        batch_size, num_points, k, num_dims
+    )  # (batch_size, num_points, k, num_dims)
+    x = x.view(batch_size, num_points, 1, num_dims).repeat(
+        1, 1, k, 1
+    )  # (batch_size, num_points, k, num_dims)
 
-    feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1,
-                                                         2)  # (batch_size, num_points, k, 2*num_dims) -> (batch_size, 2*num_dims, num_points, k)
+    feature = torch.cat((feature - x, x), dim=3).permute(
+        0, 3, 1, 2
+    )  # (batch_size, num_points, k, 2*num_dims) -> (batch_size, 2*num_dims, num_points, k)
 
     return feature  # (batch_size, 2*num_dims, num_points, k)
 
@@ -113,7 +127,7 @@ class ChamferLoss(nn.Module):
             diag_ind_y = diag_ind_y.cuda(x.get_device())
         rx = xx[:, diag_ind_x, diag_ind_x].unsqueeze(1).expand_as(zz.transpose(2, 1))
         ry = yy[:, diag_ind_y, diag_ind_y].unsqueeze(1).expand_as(zz)
-        P = (rx.transpose(2, 1) + ry - 2 * zz)
+        P = rx.transpose(2, 1) + ry - 2 * zz
         return P
 
     def forward(self, preds, gts):
@@ -148,7 +162,7 @@ class ClusterlingLayer(nn.Module):
         return x
 
     def extra_repr(self):
-        return 'in_features={}, out_features={}, alpha={}'.format(
+        return "in_features={}, out_features={}, alpha={}".format(
             self.in_features, self.out_features, self.alpha
         )
 
@@ -160,7 +174,7 @@ class DGCNN_Cls_Encoder(nn.Module):
     def __init__(self, num_clusters, num_features):
         super(DGCNN_Cls_Encoder, self).__init__()
         self.k = 20
-        self.task = 'reconstruct'
+        self.task = "reconstruct"
         self.num_clusters = num_clusters
         self.num_features = num_features
         self.bn1 = nn.BatchNorm2d(64)
@@ -169,27 +183,41 @@ class DGCNN_Cls_Encoder(nn.Module):
         self.bn4 = nn.BatchNorm2d(256)
         self.bn5 = nn.BatchNorm1d(512)
 
-        self.conv1 = nn.Sequential(nn.Conv2d(3 * 2, 64, kernel_size=1, bias=False),
-                                   self.bn1,
-                                   nn.LeakyReLU(negative_slope=0.2))
-        self.conv2 = nn.Sequential(nn.Conv2d(64 * 2, 64, kernel_size=1, bias=False),
-                                   self.bn2,
-                                   nn.LeakyReLU(negative_slope=0.2))
-        self.conv3 = nn.Sequential(nn.Conv2d(64 * 2, 128, kernel_size=1, bias=False),
-                                   self.bn3,
-                                   nn.LeakyReLU(negative_slope=0.2))
-        self.conv4 = nn.Sequential(nn.Conv2d(128 * 2, 256, kernel_size=1, bias=False),
-                                   self.bn4,
-                                   nn.LeakyReLU(negative_slope=0.2))
-        self.conv5 = nn.Sequential(nn.Conv1d(512, 512, kernel_size=1, bias=False),
-                                   self.bn5,
-                                   nn.LeakyReLU(negative_slope=0.2))
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3 * 2, 64, kernel_size=1, bias=False),
+            self.bn1,
+            nn.LeakyReLU(negative_slope=0.2),
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(64 * 2, 64, kernel_size=1, bias=False),
+            self.bn2,
+            nn.LeakyReLU(negative_slope=0.2),
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(64 * 2, 128, kernel_size=1, bias=False),
+            self.bn3,
+            nn.LeakyReLU(negative_slope=0.2),
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(128 * 2, 256, kernel_size=1, bias=False),
+            self.bn4,
+            nn.LeakyReLU(negative_slope=0.2),
+        )
+        self.conv5 = nn.Sequential(
+            nn.Conv1d(512, 512, kernel_size=1, bias=False),
+            self.bn5,
+            nn.LeakyReLU(negative_slope=0.2),
+        )
 
         self.lin_features_len = 512
         if self.num_features < self.lin_features_len:
             self.flatten = Flatten()
-            self.embedding = nn.Linear(self.lin_features_len, self.num_features, bias=False)
-            self.deembedding = nn.Linear(self.num_features, self.lin_features_len, bias=False)
+            self.embedding = nn.Linear(
+                self.lin_features_len, self.num_features, bias=False
+            )
+            self.deembedding = nn.Linear(
+                self.num_features, self.lin_features_len, bias=False
+            )
 
         self.clustering = ClusterlingLayer(self.num_features, self.num_clusters)
 
@@ -197,26 +225,54 @@ class DGCNN_Cls_Encoder(nn.Module):
         x = x.transpose(2, 1)
 
         batch_size = x.size(0)
-        x = get_graph_feature(x, k=self.k)  # (batch_size, 3, num_points) -> (batch_size, 3*2, num_points, k)
-        x = self.conv1(x)  # (batch_size, 3*2, num_points, k) -> (batch_size, 64, num_points, k)
-        x1 = x.max(dim=-1, keepdim=False)[0]  # (batch_size, 64, num_points, k) -> (batch_size, 64, num_points)
+        x = get_graph_feature(
+            x, k=self.k
+        )  # (batch_size, 3, num_points) -> (batch_size, 3*2, num_points, k)
+        x = self.conv1(
+            x
+        )  # (batch_size, 3*2, num_points, k) -> (batch_size, 64, num_points, k)
+        x1 = x.max(dim=-1, keepdim=False)[
+            0
+        ]  # (batch_size, 64, num_points, k) -> (batch_size, 64, num_points)
 
-        x = get_graph_feature(x1, k=self.k)  # (batch_size, 64, num_points) -> (batch_size, 64*2, num_points, k)
-        x = self.conv2(x)  # (batch_size, 64*2, num_points, k) -> (batch_size, 64, num_points, k)
-        x2 = x.max(dim=-1, keepdim=False)[0]  # (batch_size, 64, num_points, k) -> (batch_size, 64, num_points)
+        x = get_graph_feature(
+            x1, k=self.k
+        )  # (batch_size, 64, num_points) -> (batch_size, 64*2, num_points, k)
+        x = self.conv2(
+            x
+        )  # (batch_size, 64*2, num_points, k) -> (batch_size, 64, num_points, k)
+        x2 = x.max(dim=-1, keepdim=False)[
+            0
+        ]  # (batch_size, 64, num_points, k) -> (batch_size, 64, num_points)
 
-        x = get_graph_feature(x2, k=self.k)  # (batch_size, 64, num_points) -> (batch_size, 64*2, num_points, k)
-        x = self.conv3(x)  # (batch_size, 64*2, num_points, k) -> (batch_size, 128, num_points, k)
-        x3 = x.max(dim=-1, keepdim=False)[0]  # (batch_size, 128, num_points, k) -> (batch_size, 128, num_points)
+        x = get_graph_feature(
+            x2, k=self.k
+        )  # (batch_size, 64, num_points) -> (batch_size, 64*2, num_points, k)
+        x = self.conv3(
+            x
+        )  # (batch_size, 64*2, num_points, k) -> (batch_size, 128, num_points, k)
+        x3 = x.max(dim=-1, keepdim=False)[
+            0
+        ]  # (batch_size, 128, num_points, k) -> (batch_size, 128, num_points)
 
-        x = get_graph_feature(x3, k=self.k)  # (batch_size, 128, num_points) -> (batch_size, 128*2, num_points, k)
-        x = self.conv4(x)  # (batch_size, 128*2, num_points, k) -> (batch_size, 256, num_points, k)
-        x4 = x.max(dim=-1, keepdim=False)[0]  # (batch_size, 256, num_points, k) -> (batch_size, 256, num_points)
+        x = get_graph_feature(
+            x3, k=self.k
+        )  # (batch_size, 128, num_points) -> (batch_size, 128*2, num_points, k)
+        x = self.conv4(
+            x
+        )  # (batch_size, 128*2, num_points, k) -> (batch_size, 256, num_points, k)
+        x4 = x.max(dim=-1, keepdim=False)[
+            0
+        ]  # (batch_size, 256, num_points, k) -> (batch_size, 256, num_points)
 
         x = torch.cat((x1, x2, x3, x4), dim=1)  # (batch_size, 512, num_points)
 
-        x0 = self.conv5(x)  # (batch_size, 512, num_points) -> (batch_size, feat_dims, num_points)
-        x = x0.max(dim=-1, keepdim=False)[0]  # (batch_size, feat_dims, num_points) -> (batch_size, feat_dims)
+        x0 = self.conv5(
+            x
+        )  # (batch_size, 512, num_points) -> (batch_size, feat_dims, num_points)
+        x = x0.max(dim=-1, keepdim=False)[
+            0
+        ]  # (batch_size, feat_dims, num_points) -> (batch_size, feat_dims)
         feat = x.unsqueeze(1)  # (batch_size, feat_dims) -> (batch_size, 1, feat_dims)
         # feat = x
         # print(feat.shape)
@@ -235,9 +291,9 @@ class DGCNN_Cls_Encoder(nn.Module):
         clustering_out = self.clustering(clustering_input)
         #         print(clustering_out.shape)
 
-        if self.task == 'classify':
+        if self.task == "classify":
             return feat, x0
-        elif self.task == 'reconstruct':
+        elif self.task == "reconstruct":
             return feat, embedding, clustering_out  # (batch_size, 1, feat_dims)
 
 
@@ -248,7 +304,7 @@ class FoldNet_Decoder(nn.Module):
         self.shape = shape
         self.meshgrid = [[-3, 3, 45], [-3, 3, 45]]
         self.num_features = num_features
-        if self.shape == 'plane':
+        if self.shape == "plane":
             self.folding1 = nn.Sequential(
                 nn.Conv1d(512 + 2, 512, 1),
                 nn.ReLU(),
@@ -275,7 +331,9 @@ class FoldNet_Decoder(nn.Module):
         self.lin_features_len = 512
         if self.num_features < self.lin_features_len:
             self.embedding = nn.Linear(self.lin_features_len, num_clusters, bias=False)
-            self.deembedding = nn.Linear(self.num_features, self.lin_features_len, bias=False)
+            self.deembedding = nn.Linear(
+                self.num_features, self.lin_features_len, bias=False
+            )
 
     def build_grid(self, batch_size):
         x = np.linspace(*self.meshgrid[0])
@@ -293,18 +351,25 @@ class FoldNet_Decoder(nn.Module):
 
         else:
             x = x.unsqueeze(1)
-        x = x.transpose(1, 2).repeat(1, 1, self.m)  # (batch_size, feat_dims, num_points)
-        points = self.build_grid(x.shape[0]).transpose(1,
-                                                       2)  # (batch_size, 2, num_points) or (batch_size, 3, num_points)
+        x = x.transpose(1, 2).repeat(
+            1, 1, self.m
+        )  # (batch_size, feat_dims, num_points)
+        points = self.build_grid(x.shape[0]).transpose(
+            1, 2
+        )  # (batch_size, 2, num_points) or (batch_size, 3, num_points)
         if x.get_device() != -1:
             points = points.cuda(x.get_device())
-        cat1 = torch.cat((x, points),
-                         dim=1)  # (batch_size, feat_dims+2, num_points) or (batch_size, feat_dims+3, num_points)
+        cat1 = torch.cat(
+            (x, points), dim=1
+        )  # (batch_size, feat_dims+2, num_points) or (batch_size, feat_dims+3, num_points)
         #         print(cat1.size)
         folding_result1 = self.folding1(cat1)  # (batch_size, 3, num_points)
         cat2 = torch.cat((x, folding_result1), dim=1)  # (batch_size, 515, num_points)
         folding_result2 = self.folding2(cat2)  # (batch_size, 3, num_points)
-        return folding_result2.transpose(1, 2), folding_result1.transpose(1, 2)  # (batch_size, num_points ,3)
+        return (
+            folding_result2.transpose(1, 2),
+            folding_result1.transpose(1, 2),
+        )  # (batch_size, num_points ,3)
 
 
 class DGCNN_Cls_Classifier(nn.Module):
@@ -349,9 +414,15 @@ class ReconstructionNet(nn.Module):
 
     def forward(self, input):
         feature, embedding, clustering_out = self.encoder(input)
-        if self.decoder_decision == 'tearing':
+        if self.decoder_decision == "tearing":
             pc0, pc1, pc2, grid1, graph_wght = self.decoder(embedding)
-            return pc2, feature, embedding, clustering_out, (pc0, pc1, grid1, graph_wght)
+            return (
+                pc2,
+                feature,
+                embedding,
+                clustering_out,
+                (pc0, pc1, grid1, graph_wght),
+            )
         else:
             output, fold1 = self.decoder(embedding)
             return output, feature, embedding, clustering_out, fold1

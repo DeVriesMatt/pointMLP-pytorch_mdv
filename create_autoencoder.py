@@ -3,12 +3,14 @@ from torch import nn
 import classification_ModelNet40.models as models
 import torch.backends.cudnn as cudnn
 from classification_ModelNet40.models import pointMLP
-# from cell_dataset import PointCloudDatasetAll
+
+# from cell_dataset import PointCloudDatasetAllBoth
 from torch.utils.data import DataLoader
 import numpy as np
 import pandas as pd
 from foldingnet import ReconstructionNet, ChamferLoss
-from dataset import PointCloudDatasetAll
+from dataset import PointCloudDatasetAllBoth
+import argparse
 
 
 class MLPAutoencoder(nn.Module):
@@ -28,31 +30,57 @@ def create_dir_if_not_exist(path):
         os.makedirs(path)
 
 
-if __name__ == '__main__':
-    name_net = '/data/scratch/DBI/DUDBI/DYNCESYS/mvries/pointmlp_autoencoder'
-    print('==> Building encoder...')
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="Pointmlp-foldingnet")
+    parser.add_argument("--dataset_path", default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/", type=str)
+    parser.add_argument("--dataframe_path", default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv", type=str)
+    parser.add_argument("--output_path", default="./", type=str)
+    parser.add_argument("--num_epochs", default=250, type=int)
+    parser.add_argument("--pmlp_ckpt_path", default="best_checkpoint.pth", type=str)
+    parser.add_argument(
+        "--fold_ckpt_path",
+        default="/home/mvries/Documents/GitHub/FoldingNetNew/nets/FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_train_bothTrue_003.pt",
+        type=str,
+    )
+
+    args = parser.parse_args()
+    df = args.dataframe_path
+    root_dir = args.dataset_path
+    output_path = args.output_path
+    num_epochs = args.num_epochs
+    pmlp_ckpt_path = args.pmlp_ckpt_path
+    fold_ckpt_path = args.fold_ckpt_path
+
+    name_net = "/data/scratch/DBI/DUDBI/DYNCESYS/mvries/pointmlp_autoencoder"
+    print("==> Building encoder...")
     net = pointMLP()
-    device = 'cuda'
+    device = "cuda"
     net = net.to(device)
-    if device == 'cuda':
+    if device == "cuda":
         net = torch.nn.DataParallel(net)
         cudnn.benchmark = True
 
-    checkpoint_path = 'best_checkpoint.pth'
+    checkpoint_path = pmlp_ckpt_path
     checkpoint = torch.load(checkpoint_path)
-    net.load_state_dict(checkpoint['net'])
+    net.load_state_dict(checkpoint["net"])
     new_embedding = nn.Linear(in_features=256, out_features=50, bias=True)
     net.module.classifier[8] = new_embedding
     print(net.module.classifier)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    print('==> Building decoder...')
-    to_eval = "ReconstructionNet" + "(" + "'{0}'".format("dgcnn_cls") + ", num_clusters=5, num_features = 50, shape='plane')"
+    print("==> Building decoder...")
+    to_eval = (
+        "ReconstructionNet"
+        + "("
+        + "'{0}'".format("dgcnn_cls")
+        + ", num_clusters=5, num_features = 50, shape='plane')"
+    )
     decoder = eval(to_eval)
-    path = '/home/mvries/Documents/GitHub/FoldingNetNew/nets/FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_006.pt'
-    state_dict = torch.load(path)
-    model_state_dict = state_dict['model_state_dict']
+    fold_path = fold_ckpt_path
+    state_dict = torch.load(fold_path)
+    model_state_dict = state_dict["model_state_dict"]
     decoder.load_state_dict(model_state_dict)
     print(decoder.decoder)
 
@@ -62,39 +90,42 @@ if __name__ == '__main__':
     out, embedding, _ = model(data)
     print(out.shape)
     print(embedding.shape)
-    
-    df = '/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv'
-    root_dir = '/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/'
+
     batch_size = 16
-    learning_rate = 0.0001
-    dataset = PointCloudDatasetAll(df,
-                                   root_dir,
-                                   transform=None,
-                                   img_size=400,
-                                   target_transform=True,
-                                   centring_only=True,
-                                   cell_component='cell')
+    learning_rate = 0.00001
+    dataset = PointCloudDatasetAllBoth(
+        df,
+        root_dir,
+        transform=None,
+        img_size=400,
+        target_transform=True,
+        centring_only=True,
+        cell_component="cell",
+    )
+
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    optimizer = torch.optim.Adam(model.parameters(),
-                                 lr=learning_rate * 16 / batch_size,
-                                 betas=(0.9, 0.999),
-                                 weight_decay=1e-6)
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=learning_rate * 16 / batch_size,
+        betas=(0.9, 0.999),
+        weight_decay=1e-6,
+    )
     criterion = ChamferLoss()
-    total_loss = 0.
-    rec_loss = 0.
-    clus_loss = 0.
-    num_epochs = 200
+    total_loss = 0.0
+    rec_loss = 0.0
+    clus_loss = 0.0
+    num_epochs = num_epochs
     model.train()
-    threshold = 0.
+    threshold = 0.0
     losses = []
     test_acc = []
-    best_acc = 0.
+    best_acc = 0.0
     best_loss = 1000000000
     niter = 1
     for epoch in range(num_epochs):
         batch_num = 1
-        running_loss = 0.
-        print('Training epoch {}'.format(epoch))
+        running_loss = 0.0
+        print("Training epoch {}".format(epoch))
         model.train()
         batches = []
 
@@ -115,38 +146,44 @@ if __name__ == '__main__':
             batch_num += 1
             niter += 1
 
-            lr = np.asarray(optimizer.param_groups[0]['lr'])
+            lr = np.asarray(optimizer.param_groups[0]["lr"])
 
             if i % 10 == 0:
-                print('[%d/%d][%d/%d]\tLossTot: %.4f\tLossRec: %.4f' % (epoch,
-                                                                                num_epochs,
-                                                                                i,
-                                                                                len(dataloader),
-                                                                                loss.detach().item() / batch_size,
-                                                                                loss.detach().item() / batch_size,))
+                print(
+                    "[%d/%d][%d/%d]\tLossTot: %.4f\tLossRec: %.4f"
+                    % (
+                        epoch,
+                        num_epochs,
+                        i,
+                        len(dataloader),
+                        loss.detach().item() / batch_size,
+                        loss.detach().item() / batch_size,
+                    )
+                )
 
         # ===================log========================
         total_loss = running_loss / len(dataloader)
         if total_loss < best_loss:
-            checkpoint = {'model_state_dict': model.state_dict(),
-                          'optimizer_state_dict': optimizer.state_dict(),
-                          'epoch': epoch,
-                          'loss': total_loss}
+            checkpoint = {
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "epoch": epoch,
+                "loss": total_loss,
+            }
             best_loss = total_loss
             create_dir_if_not_exist(output_dir)
-            print('Saving model to:' + name_net + '.pt' + ' with loss = {}'
-                       .format(total_loss) + ' at epoch {}'.format(epoch))
-            torch.save(checkpoint, name_net + '.pt')
-            print('epoch [{}/{}], loss:{}'.format(epoch + 1, num_epochs, total_loss))
+            print(
+                "Saving model to:"
+                + name_net
+                + ".pt"
+                + " with loss = {}".format(total_loss)
+                + " at epoch {}".format(epoch)
+            )
+            torch.save(checkpoint, name_net + ".pt")
+            print("epoch [{}/{}], loss:{}".format(epoch + 1, num_epochs, total_loss))
 
-        print('epoch [{}/{}], loss:{:.4f}, Rec loss:{:.4f}'.format(epoch + 1,
-                                                                           num_epochs,
-                                                                           total_loss,
-                                                                           total_loss))
-
-
-    
-
-
-
-
+        print(
+            "epoch [{}/{}], loss:{:.4f}, Rec loss:{:.4f}".format(
+                epoch + 1, num_epochs, total_loss, total_loss
+            )
+        )

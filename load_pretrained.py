@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # data = torch.rand(1, 3, 2048).cuda()
     # checkpoint = torch.load('best_checkpoint.pth')
     # print(checkpoint.keys())
@@ -20,17 +20,17 @@ if __name__ == '__main__':
     # out = model(data)
     # print(out.shape)
 
-    print('==> Building model..')
+    print("==> Building model..")
     net = pointMLP()
-    device = 'cuda'
+    device = "cuda"
     net = net.to(device)
-    if device == 'cuda':
+    if device == "cuda":
         net = torch.nn.DataParallel(net)
         cudnn.benchmark = True
 
-    checkpoint_path = 'best_checkpoint.pth'
+    checkpoint_path = "best_checkpoint.pth"
     checkpoint = torch.load(checkpoint_path)
-    net.load_state_dict(checkpoint['net'])
+    net.load_state_dict(checkpoint["net"])
     net.eval()
     print(net)
     activation = {}
@@ -41,19 +41,17 @@ if __name__ == '__main__':
 
         return hook
 
-    net.module.classifier[4].register_forward_hook(get_activation('features'))
+    net.module.classifier[4].register_forward_hook(get_activation("features"))
     # data = torch.rand(1, 3, 2048).cuda()
     # out = net(data)
     # print(activation['features'].shape)
 
-    df = '/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv'
-    root_dir = '/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/'
+    df = "/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv"
+    root_dir = "/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/"
 
-    dataset = PointCloudDatasetAll(df,
-                                   root_dir,
-                                   transform=None,
-                                   img_size=400,
-                                   target_transform=True)
+    dataset = PointCloudDatasetAll(
+        df, root_dir, transform=None, img_size=400, target_transform=True
+    )
 
     batch_size = 16
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -76,10 +74,10 @@ if __name__ == '__main__':
             inputs = inputs.permute(0, 2, 1)
             output = net(inputs)
             labels_test.append(torch.squeeze(lab).detach().numpy())
-            features.append(torch.squeeze(activation['features']).cpu().numpy())
+            features.append(torch.squeeze(activation["features"]).cpu().numpy())
 
-    print(activation['features'])
+    print(activation["features"])
     print(np.array(features).shape)
     df = pd.DataFrame(np.asarray(features))
-    df['labels'] = np.asarray(labels_test)
-    df.to_csv('cell_features_mlp.csv')
+    df["labels"] = np.asarray(labels_test)
+    df.to_csv("cell_features_mlp.csv")
