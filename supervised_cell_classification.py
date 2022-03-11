@@ -161,7 +161,7 @@ if __name__ == "__main__":
                 "model_state_dict": net.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "epoch": epoch,
-                "loss": total_loss,
+                "loss": valid_loss,
             }
             best_loss = valid_loss
             create_dir_if_not_exist(output_path)
