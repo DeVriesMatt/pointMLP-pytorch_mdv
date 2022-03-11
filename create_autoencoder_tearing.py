@@ -12,6 +12,7 @@ from foldingnet import ReconstructionNet, ChamferLoss
 from dataset import PointCloudDatasetAllBoth, PointCloudDatasetAllBothNotSpec
 import argparse
 import os
+from tearing.folding_decoder import FoldingNetBasicDecoder
 
 
 class MLPAutoencoder(nn.Module):
@@ -22,8 +23,8 @@ class MLPAutoencoder(nn.Module):
 
     def forward(self, x):
         embedding = self.encoder(x)
-        output, folding1 = self.decoder(embedding)
-        return output, embedding, folding1
+        output, grid = self.decoder(embedding)
+        return output, embedding, grid
 
 
 def create_dir_if_not_exist(path):
@@ -53,7 +54,7 @@ if __name__ == "__main__":
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
 
-    name_net = output_path + "pointmlp_foldingtearingVersion_autoencoder"
+    name_net = output_path + "pointmlp_folding_autoencoder"
     print("==> Building encoder...")
     net = pointMLP()
     device = "cuda"
@@ -76,20 +77,11 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     print("==> Building decoder...")
-    to_eval = (
-        "ReconstructionNet"
-        + "("
-        + "'{0}'".format("dgcnn_cls")
-        + ", num_clusters=5, num_features = 50, shape='plane')"
+    decoder = FoldingNetBasicDecoder(
+        num_features=50, num_clusters=10
     )
-    decoder = eval(to_eval)
-    fold_path = fold_ckpt_path
-    state_dict = torch.load(fold_path)
-    model_state_dict = state_dict["model_state_dict"]
-    decoder.load_state_dict(model_state_dict)
-    print(decoder.decoder)
 
-    model = MLPAutoencoder(encoder=net.module, decoder=decoder.decoder).cuda()
+    model = MLPAutoencoder(encoder=net.module, decoder=decoder).cuda()
     data = torch.rand(2, 3, 2048).cuda()
     print("===> testing pointMLP ...")
     out, embedding, _ = model(data)
