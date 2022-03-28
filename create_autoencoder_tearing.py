@@ -54,7 +54,7 @@ if __name__ == "__main__":
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
 
-    name_net = output_path + "pointmlp_folding_autoencoder"
+    name_net = output_path + "pointmlp_foldingTearingVersion_autoencoder"
     print("==> Building encoder...")
     net = pointMLP()
     device = "cuda"
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     print("==> Building decoder...")
-    decoder = FoldingNetBasicDecoder(
+    decoder = TearingNetDecoder(
         num_features=50, num_clusters=10
     )
 

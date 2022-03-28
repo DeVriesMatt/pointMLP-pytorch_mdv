@@ -53,7 +53,7 @@ if __name__ == "__main__":
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
 
-    name_net = output_path + "pointmlp_foldingtearingVersion_autoencoder"
+    name_net = output_path + "pointmlp_foldingoriginalVersion_autoencoder"
     print("==> Building encoder...")
     net = pointMLP()
     device = "cuda"
@@ -65,8 +65,8 @@ if __name__ == "__main__":
     checkpoint_path = pmlp_ckpt_path
     checkpoint = torch.load(checkpoint_path)
     net.load_state_dict(checkpoint["net"])
-    for param in net.module.parameters():
-        param.requires_grad = False
+    # for param in net.module.parameters():
+    #     param.requires_grad = False
     new_embedding = nn.Linear(in_features=256, out_features=50, bias=True)
     net.module.classifier[8] = new_embedding
     net.module.classifier[8].weight.requires_grad = True

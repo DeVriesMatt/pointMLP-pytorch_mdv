@@ -313,4 +313,6 @@ class PointCloudDatasetAllBothNotSpec(Dataset):
         feats = self.new_df.iloc[idx, 16:-4]
         feats = torch.tensor(feats)
 
-        return image, label, feats
+        serial_number = self.new_df.loc[idx, 'serialNumber']
+
+        return image, label, feats, serial_number
