@@ -45,6 +45,11 @@ if __name__ == "__main__":
         default="/home/mvries/Documents/GitHub/FoldingNetNew/nets/FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_train_bothTrue_003.pt",
         type=str,
     )
+    parser.add_argument(
+        "--full_checkpoint_path",
+        default="/run/user/1128299809/gvfs/smb-share:server=rds.icr.ac.uk,share=data/DBI/DUDBI/DYNCESYS/mvries/ResultsAlma/pointMLP-pytorch/pointmlp_folding_autoencoder.pt",
+        type=str,
+    )
 
     args = parser.parse_args()
     df = args.dataframe_path
@@ -53,6 +58,7 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
+    full_checkpoint_path = args.full_checkpoint_path
 
     name_net = output_path + "pointmlp_foldingTearingVersion_autoencoder_allparams"
     print("==> Building encoder...")
@@ -82,6 +88,18 @@ if __name__ == "__main__":
     )
 
     model = MLPAutoencoder(encoder=net.module, decoder=decoder).cuda()
+
+    checkpoint = torch.load(full_checkpoint_path)
+    model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
+    for k in checkpoint['model_state_dict']:
+        if k in model_dict:
+            model_dict[k] = checkpoint['model_state_dict'][k]
+            print("    Found weight: " + k)
+        elif k.replace('folding1', 'folding') in model_dict:
+            model_dict[k.replace('folding1', 'folding')] = checkpoint['model_state_dict'][k]
+            print("    Found weight: " + k)
+    model.load_state_dict(model_dict)
+    
     data = torch.rand(2, 3, 2048).cuda()
     print("===> testing pointMLP ...")
     out, embedding, _ = model(data)

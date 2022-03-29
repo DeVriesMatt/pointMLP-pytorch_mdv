@@ -315,4 +315,4 @@ class PointCloudDatasetAllBothNotSpec(Dataset):
 
         serial_number = self.new_df.loc[idx, 'serialNumber']
 
-        return image, label, feats, serial_number
+        return image, label, (feats, serial_number)
