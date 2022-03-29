@@ -86,6 +86,7 @@ if __name__ == "__main__":
     out, embedding, _ = model(data)
     print(out.shape)
     print(embedding.shape)
+    criterion = ChamferLoss()
 
     batch_size = 16
     learning_rate = 0.00001
@@ -122,6 +123,8 @@ if __name__ == "__main__":
             outputs_test.append(torch.squeeze(output).cpu().detach().numpy())
             embeddings_test.append(torch.squeeze(embedding).cpu().detach().numpy())
             serial_numbers.append(serial_num)
+            loss = criterion(inputs, output)
+            print(loss)
 
     folding_data = pd.DataFrame(np.asarray(embeddings_test))
     folding_data['serialNumber'] = np.asarray(serial_numbers)
