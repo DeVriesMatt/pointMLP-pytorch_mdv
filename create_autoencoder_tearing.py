@@ -77,7 +77,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     print("==> Building decoder...")
-    decoder = TearingNetDecoder(
+    decoder = FoldingNetBasicDecoder(
         num_features=50, num_clusters=10
     )
 
