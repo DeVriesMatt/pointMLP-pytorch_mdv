@@ -54,7 +54,7 @@ if __name__ == "__main__":
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
 
-    name_net = output_path + "pointmlp_foldingtearingVersion_autoencoder"
+    name_net = output_path + "pointmlp_foldingTearingVersion_autoencoder_allparams"
     print("==> Building encoder...")
     net = pointMLP()
     device = "cuda"
