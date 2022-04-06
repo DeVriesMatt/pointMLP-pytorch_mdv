@@ -2,28 +2,48 @@ import torch
 from torch import nn
 import classification_ModelNet40.models as models
 import torch.backends.cudnn as cudnn
-from classification_ModelNet40.models import pointMLP
+from classification_ScanObjectNN.models import pointMLPElite
 
 # from cell_dataset import PointCloudDatasetAllBoth
 from torch.utils.data import DataLoader
 import numpy as np
 import pandas as pd
 from foldingnet import ReconstructionNet, ChamferLoss
-from dataset import PointCloudDatasetAllBoth, PointCloudDatasetAllBothNotSpec
+from angle_loss import AngleLoss
+from dataset import SimCLR1024Both
+
 import argparse
 import os
+from tearing.folding_decoder import FoldingNetBasicDecoder
+from nt_xent import NT_Xent
 
 
-class MLPAutoencoder(nn.Module):
-    def __init__(self, encoder, decoder):
-        super(MLPAutoencoder, self).__init__()
-        self.encoder = encoder
-        self.decoder = decoder
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
 
     def forward(self, x):
-        embedding = self.encoder(x)
-        output, folding1 = self.decoder(embedding)
-        return output, embedding, folding1
+        return x
+
+
+class SimCLR(nn.Module):
+    def __init__(self, encoder):
+        super(SimCLR, self).__init__()
+        self.encoder = encoder
+        self.encoder.classifier[8] = Identity()
+        self.projector = nn.Sequential(
+            nn.Linear(256, 256, bias=False),
+            nn.ReLU(),
+            nn.Linear(256, 64, bias=False),
+        )
+
+    def forward(self, x_i, x_j):
+        h_i = self.encoder(x_i)
+        h_j = self.encoder(x_j)
+
+        z_i = self.projector(h_i)
+        z_j = self.projector(h_j)
+        return h_i, h_j, z_i, z_j
 
 
 def create_dir_if_not_exist(path):
@@ -33,7 +53,7 @@ def create_dir_if_not_exist(path):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="Pointmlp-foldingnet")
+    parser = argparse.ArgumentParser(description="Pointmlp-simclr")
     parser.add_argument(
         "--dataset_path",
         default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/",
@@ -46,10 +66,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("--output_path", default="./", type=str)
     parser.add_argument("--num_epochs", default=250, type=int)
-    parser.add_argument("--pmlp_ckpt_path", default="best_checkpoint.pth", type=str)
+    parser.add_argument(
+        "--pmlp_ckpt_path", default="best_checkpoint_elite.pth", type=str
+    )
     parser.add_argument(
         "--fold_ckpt_path",
         default="/home/mvries/Documents/GitHub/FoldingNetNew/nets/FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_train_bothTrue_003.pt",
+        type=str,
+    )
+    parser.add_argument(
+        "--full_checkpoint_path",
+        default="/home/mvries/Documents/GitHub/pointMLP-pytorch/"
+                "best_checkpoint_elite.pth",
         type=str,
     )
 
@@ -60,10 +88,11 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
+    full_checkpoint_path = args.full_checkpoint_path
 
-    name_net = output_path + "pointmlp_foldingoriginalVersion_autoencoder"
+    name_net = output_path + "pointmlpelite_simclr"
     print("==> Building encoder...")
-    net = pointMLP()
+    net = pointMLPElite(num_classes=15)
     device = "cuda"
     net = net.to(device)
     if device == "cuda":
@@ -73,40 +102,21 @@ if __name__ == "__main__":
     checkpoint_path = pmlp_ckpt_path
     checkpoint = torch.load(checkpoint_path)
     net.load_state_dict(checkpoint["net"])
-    # for param in net.module.parameters():
-    #     param.requires_grad = False
-    new_embedding = nn.Linear(in_features=256, out_features=50, bias=True)
-    net.module.classifier[8] = new_embedding
-    net.module.classifier[8].weight.requires_grad = True
-    net.module.classifier[8].bias.requires_grad = True
-    print(net.module.classifier)
-
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    print("==> Building decoder...")
-    to_eval = (
-        "ReconstructionNet"
-        + "("
-        + "'{0}'".format("dgcnn_cls")
-        + ", num_clusters=5, num_features = 50, shape='plane')"
-    )
-    decoder = eval(to_eval)
-    fold_path = fold_ckpt_path
-    state_dict = torch.load(fold_path)
-    model_state_dict = state_dict["model_state_dict"]
-    decoder.load_state_dict(model_state_dict)
-    print(decoder.decoder)
+    print("==> Building simclr...")
 
-    model = MLPAutoencoder(encoder=net.module, decoder=decoder.decoder).cuda()
-    data = torch.rand(2, 3, 2048).cuda()
-    print("===> testing pointMLP ...")
-    out, embedding, _ = model(data)
-    print(out.shape)
-    print(embedding.shape)
+    model = SimCLR(encoder=net.module).cuda()
 
-    batch_size = 16
-    learning_rate = 0.00001
-    dataset = PointCloudDatasetAllBothNotSpec(
+    data = torch.rand(2, 3, 1024).cuda()
+    print("===> testing pointMLP simclr ...")
+    # h_i, h_j, z_i, z_j = model(data)
+    # print(h_i.shape)
+    # print(z_i.shape)
+
+    batch_size = 50
+    learning_rate = 0.00003 * batch_size / 100
+    dataset = SimCLR1024Both(
         df,
         root_dir,
         transform=None,
@@ -119,11 +129,12 @@ if __name__ == "__main__":
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer = torch.optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()),
-        lr=learning_rate * 16 / batch_size,
+        lr=learning_rate,
         betas=(0.9, 0.999),
-        weight_decay=1e-6,
+        weight_decay=1e-8,
     )
-    criterion = ChamferLoss()
+    criterion = NT_Xent(50, 0.5, 1)
+
     total_loss = 0.0
     rec_loss = 0.0
     clus_loss = 0.0
@@ -143,14 +154,15 @@ if __name__ == "__main__":
         batches = []
 
         for i, data in enumerate(dataloader, 0):
-            inputs, labels, _ = data
-            inputs = inputs.to(device)
+            image, rotated_jitter_translated, rotated_jitter_translated2, serial_number = data
+            x_i = rotated_jitter_translated.to(device)
+            x_j = rotated_jitter_translated2.to(device)
 
             # ===================forward=====================
             with torch.set_grad_enabled(True):
-                output, embedding, _ = model(inputs.permute(0, 2, 1))
+                h_i, h_j, z_i, z_j = model(x_i.permute(0, 2, 1), x_j.permute(0, 2, 1))
                 optimizer.zero_grad()
-                loss = criterion(inputs, output)
+                loss = criterion(z_i, z_j)
                 # ===================backward====================
                 loss.backward()
                 optimizer.step()
@@ -163,14 +175,13 @@ if __name__ == "__main__":
 
             if i % 10 == 0:
                 print(
-                    "[%d/%d][%d/%d]\tLossTot: %.4f\tLossRec: %.4f"
+                    "[%d/%d][%d/%d]\tLossTot: %.2f "
                     % (
                         epoch,
                         num_epochs,
                         i,
                         len(dataloader),
-                        loss.detach().item() / batch_size,
-                        loss.detach().item() / batch_size,
+                        loss.detach().item() / batch_size
                     )
                 )
 

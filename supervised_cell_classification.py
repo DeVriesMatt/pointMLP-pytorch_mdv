@@ -16,13 +16,21 @@ import os
 def create_dir_if_not_exist(path):
     if not os.path.exists(path):
         os.makedirs(path)
-        
-        
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Pointmlp-foldingnet")
-    parser.add_argument("--dataset_path", default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/", type=str)
-    parser.add_argument("--dataframe_path", default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv", type=str)
+    parser.add_argument(
+        "--dataset_path",
+        default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/",
+        type=str,
+    )
+    parser.add_argument(
+        "--dataframe_path",
+        default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv",
+        type=str,
+    )
     parser.add_argument("--output_path", default="./", type=str)
     parser.add_argument("--num_epochs", default=250, type=int)
     parser.add_argument("--pmlp_ckpt_path", default="best_checkpoint.pth", type=str)
@@ -48,7 +56,7 @@ if __name__ == "__main__":
     net.load_state_dict(checkpoint["net"])
     for param in net.module.parameters():
         param.requires_grad = False
-        
+
     new_embedding = nn.Linear(in_features=256, out_features=1, bias=True)
     net.module.classifier[8] = new_embedding
     net.module.classifier[8].weight.requires_grad = True
@@ -108,11 +116,11 @@ if __name__ == "__main__":
             with torch.set_grad_enabled(True):
                 output = net(inputs.permute(0, 2, 1))
                 optimizer.zero_grad()
-                loss = criterion(output.type(torch.cuda.FloatTensor), 
-                                 labels)
-                acc = (torch.sigmoid(output).reshape(-1).detach().cpu().numpy().round() == labels.reshape(
-                    -1
-                ).detach().cpu().numpy().round()).mean()
+                loss = criterion(output.type(torch.cuda.FloatTensor), labels)
+                acc = (
+                    torch.sigmoid(output).reshape(-1).detach().cpu().numpy().round()
+                    == labels.reshape(-1).detach().cpu().numpy().round()
+                ).mean()
                 # ===================backward===================
                 loss.backward()
                 optimizer.step()
@@ -140,23 +148,23 @@ if __name__ == "__main__":
         for i, data in enumerate(dataloader_valid, 0):
             inputs, labels, _ = data
             inputs = inputs.to(device)
-            labels = labels.unsqueeze(1).type(
-                torch.cuda.FloatTensor
-            ).to(device)
+            labels = labels.unsqueeze(1).type(torch.cuda.FloatTensor).to(device)
             # ===================forward=====================
             with torch.set_grad_enabled(True):
                 output = net(inputs.permute(0, 2, 1))
-                loss = criterion(output.type(torch.cuda.FloatTensor),
-                                 labels)
-                acc = (torch.sigmoid(output).reshape(-1).detach().cpu().numpy().round() == labels.reshape(
-                    -1).detach().cpu().numpy().round()).mean()
+                loss = criterion(output.type(torch.cuda.FloatTensor), labels)
+                acc = (
+                    torch.sigmoid(output).reshape(-1).detach().cpu().numpy().round()
+                    == labels.reshape(-1).detach().cpu().numpy().round()
+                ).mean()
 
             valid_loss += loss.detach().item()
-            
+
         print(
-            f'Epoch {epoch} \t'
-            f'\t Training Loss: {train_loss / len(dataloader_train)} \t'
-            f'\t Validation Loss: {valid_loss / len(dataloader_valid)}')
+            f"Epoch {epoch} \t"
+            f"\t Training Loss: {train_loss / len(dataloader_train)} \t"
+            f"\t Validation Loss: {valid_loss / len(dataloader_valid)}"
+        )
         if valid_loss < best_loss:
             checkpoint = {
                 "model_state_dict": net.state_dict(),
@@ -174,5 +182,3 @@ if __name__ == "__main__":
                 + " at epoch {}".format(epoch)
             )
             torch.save(checkpoint, name_net + ".pt")
-
-

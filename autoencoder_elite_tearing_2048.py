@@ -2,16 +2,21 @@ import torch
 from torch import nn
 import classification_ModelNet40.models as models
 import torch.backends.cudnn as cudnn
-from classification_ModelNet40.models import pointMLP
+from classification_ScanObjectNN.models import pointMLPElite
 
 # from cell_dataset import PointCloudDatasetAllBoth
 from torch.utils.data import DataLoader
 import numpy as np
 import pandas as pd
 from foldingnet import ReconstructionNet, ChamferLoss
-from dataset import PointCloudDatasetAllBoth, PointCloudDatasetAllBothNotSpec
+from dataset import (
+    PointCloudDatasetAllBoth,
+    PointCloudDatasetAllBothNotSpec,
+    PointCloudDatasetAllBothNotSpec1024,
+)
 import argparse
 import os
+from tearing.folding_decoder import FoldingNetBasicDecoder
 
 
 class MLPAutoencoder(nn.Module):
@@ -22,8 +27,8 @@ class MLPAutoencoder(nn.Module):
 
     def forward(self, x):
         embedding = self.encoder(x)
-        output, folding1 = self.decoder(embedding)
-        return output, embedding, folding1
+        output, grid = self.decoder(embedding)
+        return output, embedding, grid
 
 
 def create_dir_if_not_exist(path):
@@ -46,10 +51,17 @@ if __name__ == "__main__":
     )
     parser.add_argument("--output_path", default="./", type=str)
     parser.add_argument("--num_epochs", default=250, type=int)
-    parser.add_argument("--pmlp_ckpt_path", default="best_checkpoint.pth", type=str)
+    parser.add_argument(
+        "--pmlp_ckpt_path", default="best_checkpoint_elite.pth", type=str
+    )
     parser.add_argument(
         "--fold_ckpt_path",
         default="/home/mvries/Documents/GitHub/FoldingNetNew/nets/FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_train_bothTrue_003.pt",
+        type=str,
+    )
+    parser.add_argument(
+        "--full_checkpoint_path",
+        default="/run/user/1128299809/gvfs/smb-share:server=rds.icr.ac.uk,share=data/DBI/DUDBI/DYNCESYS/mvries/ResultsAlma/pointMLP-pytorch/pointmlp_foldingTearingVersion_autoencoder_allparams.pt",
         type=str,
     )
 
@@ -60,10 +72,11 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
+    full_checkpoint_path = args.full_checkpoint_path
 
-    name_net = output_path + "pointmlp_foldingoriginalVersion_autoencoder"
+    name_net = output_path + "pointmlpelite_foldingTearingVersion_autoencoder_allparams2048"
     print("==> Building encoder...")
-    net = pointMLP()
+    net = pointMLPElite(num_classes=15)
     device = "cuda"
     net = net.to(device)
     if device == "cuda":
@@ -84,21 +97,25 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     print("==> Building decoder...")
-    to_eval = (
-        "ReconstructionNet"
-        + "("
-        + "'{0}'".format("dgcnn_cls")
-        + ", num_clusters=5, num_features = 50, shape='plane')"
-    )
-    decoder = eval(to_eval)
-    fold_path = fold_ckpt_path
-    state_dict = torch.load(fold_path)
-    model_state_dict = state_dict["model_state_dict"]
-    decoder.load_state_dict(model_state_dict)
-    print(decoder.decoder)
+    decoder = FoldingNetBasicDecoder(num_features=50, num_clusters=10)
 
-    model = MLPAutoencoder(encoder=net.module, decoder=decoder.decoder).cuda()
-    data = torch.rand(2, 3, 2048).cuda()
+    model = MLPAutoencoder(encoder=net.module, decoder=decoder).cuda()
+
+    checkpoint = torch.load(full_checkpoint_path)
+    model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
+    for k in checkpoint["model_state_dict"]:
+        if "decoder" in k:
+            if k in model_dict:
+                model_dict[k] = checkpoint["model_state_dict"][k]
+                print("    Found weight: " + k)
+            elif k.replace("folding1", "folding") in model_dict:
+                model_dict[k.replace("folding1", "folding")] = checkpoint[
+                    "model_state_dict"
+                ][k]
+                print("    Found weight: " + k)
+    model.load_state_dict(model_dict)
+
+    data = torch.rand(2, 3, 1024).cuda()
     print("===> testing pointMLP ...")
     out, embedding, _ = model(data)
     print(out.shape)

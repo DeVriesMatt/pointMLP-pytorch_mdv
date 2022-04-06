@@ -2,28 +2,44 @@ import torch
 from torch import nn
 import classification_ModelNet40.models as models
 import torch.backends.cudnn as cudnn
-from classification_ModelNet40.models import pointMLP
+from classification_ScanObjectNN.models import pointMLPElite
 
 # from cell_dataset import PointCloudDatasetAllBoth
 from torch.utils.data import DataLoader
 import numpy as np
 import pandas as pd
 from foldingnet import ReconstructionNet, ChamferLoss
-from dataset import PointCloudDatasetAllBoth, PointCloudDatasetAllBothNotSpec
+from angle_loss import AngleLoss
+from dataset import (
+    PointCloudDatasetAllBoth,
+    PointCloudDatasetAllBothNotSpec,
+    PointCloudDatasetAllBothNotSpec1024,
+    PointCloudDatasetAllBothNotSpecRotation,
+    PointCloudDatasetAllBothNotSpecRotation1024,
+    PointCloudDatasetAllBothNotSpec2DRotation1024,
+    PointCloudDatasetAllBothKLDivergranceRotation1024
+)
 import argparse
 import os
+from tearing.folding_decoder import FoldingNetBasicDecoder
 
 
 class MLPAutoencoder(nn.Module):
     def __init__(self, encoder, decoder):
         super(MLPAutoencoder, self).__init__()
         self.encoder = encoder
+        token = torch.Tensor(50)
+        rotation_token = nn.Parameter(token)
+        self.rotation_token = nn.init.normal_(rotation_token)
+        self.token_classifier = nn.Linear(50, 24)
         self.decoder = decoder
 
     def forward(self, x):
-        embedding = self.encoder(x)
-        output, folding1 = self.decoder(embedding)
-        return output, embedding, folding1
+        embeddings = self.encoder(x)
+        new_embeddings = torch.mul(embeddings, self.rotation_token)
+        rotation_classifier = self.token_classifier(self.rotation_token)
+        outs, grid = self.decoder(new_embeddings)
+        return outs, embeddings, grid, new_embeddings, rotation_classifier
 
 
 def create_dir_if_not_exist(path):
@@ -46,10 +62,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("--output_path", default="./", type=str)
     parser.add_argument("--num_epochs", default=250, type=int)
-    parser.add_argument("--pmlp_ckpt_path", default="best_checkpoint.pth", type=str)
+    parser.add_argument(
+        "--pmlp_ckpt_path", default="best_checkpoint_elite.pth", type=str
+    )
     parser.add_argument(
         "--fold_ckpt_path",
         default="/home/mvries/Documents/GitHub/FoldingNetNew/nets/FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_train_bothTrue_003.pt",
+        type=str,
+    )
+    parser.add_argument(
+        "--full_checkpoint_path",
+        default="/home/mvries/Documents/GitHub/pointMLP-pytorch/"
+                "pointmlpelite_foldingTearingVersion_autoencoder_allparams.pt",
         type=str,
     )
 
@@ -60,19 +84,20 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
+    full_checkpoint_path = args.full_checkpoint_path
 
-    name_net = output_path + "pointmlp_foldingoriginalVersion_autoencoder"
+    name_net = output_path + "pointmlpelite_foldingTearingVersion_autoencoder_allparams1024RotationTokenClassifier"
     print("==> Building encoder...")
-    net = pointMLP()
+    net = pointMLPElite(num_classes=15)
     device = "cuda"
     net = net.to(device)
     if device == "cuda":
         net = torch.nn.DataParallel(net)
         cudnn.benchmark = True
 
-    checkpoint_path = pmlp_ckpt_path
-    checkpoint = torch.load(checkpoint_path)
-    net.load_state_dict(checkpoint["net"])
+    # checkpoint_path = pmlp_ckpt_path
+    # checkpoint = torch.load(checkpoint_path)
+    # net.load_state_dict(checkpoint["net"])
     # for param in net.module.parameters():
     #     param.requires_grad = False
     new_embedding = nn.Linear(in_features=256, out_features=50, bias=True)
@@ -84,29 +109,33 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     print("==> Building decoder...")
-    to_eval = (
-        "ReconstructionNet"
-        + "("
-        + "'{0}'".format("dgcnn_cls")
-        + ", num_clusters=5, num_features = 50, shape='plane')"
-    )
-    decoder = eval(to_eval)
-    fold_path = fold_ckpt_path
-    state_dict = torch.load(fold_path)
-    model_state_dict = state_dict["model_state_dict"]
-    decoder.load_state_dict(model_state_dict)
-    print(decoder.decoder)
+    decoder = FoldingNetBasicDecoder(num_features=50, num_clusters=10)
 
-    model = MLPAutoencoder(encoder=net.module, decoder=decoder.decoder).cuda()
-    data = torch.rand(2, 3, 2048).cuda()
+    model = MLPAutoencoder(encoder=net.module, decoder=decoder).cuda()
+
+    checkpoint = torch.load(full_checkpoint_path)
+    model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
+    for k in checkpoint["model_state_dict"]:
+
+        if k in model_dict:
+            model_dict[k] = checkpoint["model_state_dict"][k]
+            print("    Found weight: " + k)
+        elif k.replace("folding1", "folding") in model_dict:
+            model_dict[k.replace("folding1", "folding")] = checkpoint[
+                "model_state_dict"
+            ][k]
+            print("    Found weight: " + k)
+    # model.load_state_dict(torch.load(full_checkpoint_path)['model_state_dict'])
+
+    data = torch.rand(2, 3, 1024).cuda()
     print("===> testing pointMLP ...")
-    out, embedding, _ = model(data)
+    out, embedding, _, pred_a = model(data)
     print(out.shape)
     print(embedding.shape)
 
     batch_size = 16
-    learning_rate = 0.00001
-    dataset = PointCloudDatasetAllBothNotSpec(
+    learning_rate = 0.0001
+    dataset = PointCloudDatasetAllBothKLDivergranceRotation1024(
         df,
         root_dir,
         transform=None,
@@ -121,9 +150,12 @@ if __name__ == "__main__":
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=learning_rate * 16 / batch_size,
         betas=(0.9, 0.999),
-        weight_decay=1e-6,
+        weight_decay=1e-8,
     )
     criterion = ChamferLoss()
+    criterion_rot_a = AngleLoss()
+    criterion_rot_b = AngleLoss()
+    criterion_rot_c = AngleLoss()
     total_loss = 0.0
     rec_loss = 0.0
     clus_loss = 0.0
@@ -143,15 +175,18 @@ if __name__ == "__main__":
         batches = []
 
         for i, data in enumerate(dataloader, 0):
-            inputs, labels, _ = data
-            inputs = inputs.to(device)
+            image, rotated_image, serial_number = data
+            inputs = image.to(device)
+            rotated_inputs = rotated_image.to(device)
 
             # ===================forward=====================
             with torch.set_grad_enabled(True):
-                output, embedding, _ = model(inputs.permute(0, 2, 1))
-                optimizer.zero_grad()
-                loss = criterion(inputs, output)
+                outputs, embeddings, grid, new_embedding = model(rotated_inputs.permute(0, 2, 1))
+                optimizer.zero_grad() 
+                loss_rec = criterion(inputs, outputs)
+                
                 # ===================backward====================
+                loss = loss_rec
                 loss.backward()
                 optimizer.step()
 
@@ -163,14 +198,14 @@ if __name__ == "__main__":
 
             if i % 10 == 0:
                 print(
-                    "[%d/%d][%d/%d]\tLossTot: %.4f\tLossRec: %.4f"
+                    "[%d/%d][%d/%d]\tLossTot: %.2f\tLossRec: %.2f"
                     % (
                         epoch,
                         num_epochs,
                         i,
                         len(dataloader),
                         loss.detach().item() / batch_size,
-                        loss.detach().item() / batch_size,
+                        loss_rec.detach().item() / batch_size,
                     )
                 )
 

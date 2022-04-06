@@ -132,3 +132,6 @@ dmypy.json
 
 cell_features_mlp.csv
 best_checkpoint.pth
+best_checkpoint_elite.pth
+*.pth
+*.pt

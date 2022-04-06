@@ -15,7 +15,7 @@ class TearingNetDecoder(nn.Module):
         self.num_features = num_features
         self.num_cluster = num_clusters
         if self.num_features < self.lin_features_len:
-            self.embedding = nn.Linear(self.lin_features_len, num_clusters, bias=False)
+            self.embedding = nn.Linear(self.lin_features_len, num_features, bias=False)
             self.deembedding = nn.Linear(
                 self.num_features, self.lin_features_len, bias=False
             )
@@ -39,7 +39,6 @@ class TearingNetDecoder(nn.Module):
 
         else:
             x = x.unsqueeze(1)
-
 
         grid0 = (
             self.grid.cuda().unsqueeze(0).expand(x.shape[0], -1, -1)

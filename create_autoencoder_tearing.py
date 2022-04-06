@@ -35,8 +35,16 @@ def create_dir_if_not_exist(path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Pointmlp-foldingnet")
-    parser.add_argument("--dataset_path", default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/", type=str)
-    parser.add_argument("--dataframe_path", default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv", type=str)
+    parser.add_argument(
+        "--dataset_path",
+        default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/",
+        type=str,
+    )
+    parser.add_argument(
+        "--dataframe_path",
+        default="/home/mvries/Documents/Datasets/OPM/SingleCellFromNathan_17122021/all_cell_data.csv",
+        type=str,
+    )
     parser.add_argument("--output_path", default="./", type=str)
     parser.add_argument("--num_epochs", default=250, type=int)
     parser.add_argument("--pmlp_ckpt_path", default="best_checkpoint.pth", type=str)
@@ -83,23 +91,23 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     print("==> Building decoder...")
-    decoder = FoldingNetBasicDecoder(
-        num_features=50, num_clusters=10
-    )
+    decoder = FoldingNetBasicDecoder(num_features=50, num_clusters=10)
 
     model = MLPAutoencoder(encoder=net.module, decoder=decoder).cuda()
 
     checkpoint = torch.load(full_checkpoint_path)
     model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
-    for k in checkpoint['model_state_dict']:
+    for k in checkpoint["model_state_dict"]:
         if k in model_dict:
-            model_dict[k] = checkpoint['model_state_dict'][k]
+            model_dict[k] = checkpoint["model_state_dict"][k]
             print("    Found weight: " + k)
-        elif k.replace('folding1', 'folding') in model_dict:
-            model_dict[k.replace('folding1', 'folding')] = checkpoint['model_state_dict'][k]
+        elif k.replace("folding1", "folding") in model_dict:
+            model_dict[k.replace("folding1", "folding")] = checkpoint[
+                "model_state_dict"
+            ][k]
             print("    Found weight: " + k)
     model.load_state_dict(model_dict)
-    
+
     data = torch.rand(2, 3, 2048).cuda()
     print("===> testing pointMLP ...")
     out, embedding, _ = model(data)
