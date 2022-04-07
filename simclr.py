@@ -146,6 +146,9 @@ if __name__ == "__main__":
     best_acc = 0.0
     best_loss = 1000000000
     niter = 1
+    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    logging.basicConfig(filename=name_logging, level=logging.INFO)
+    logging.info(f"Started training model {name} at {now}.")
     for epoch in range(num_epochs):
         batch_num = 1
         running_loss = 0.0
@@ -184,6 +187,11 @@ if __name__ == "__main__":
                         loss.detach().item() / batch_size
                     )
                 )
+                logging.info(
+                    f"[{epoch}/{num_epochs}]"
+                    f"[{i}/{len(dataloader)}]"
+                    f"LossTot: {loss.detach().item() / batch_size}"
+                )
 
         # ===================log========================
         total_loss = running_loss / len(dataloader)
@@ -203,6 +211,7 @@ if __name__ == "__main__":
                 + " with loss = {}".format(total_loss)
                 + " at epoch {}".format(epoch)
             )
+            logging.info(f"Saving model to {name_model} with loss = {best_loss}.")
             torch.save(checkpoint, name_net + ".pt")
             print("epoch [{}/{}], loss:{}".format(epoch + 1, num_epochs, total_loss))
 
@@ -211,3 +220,4 @@ if __name__ == "__main__":
                 epoch + 1, num_epochs, total_loss, total_loss
             )
         )
+        

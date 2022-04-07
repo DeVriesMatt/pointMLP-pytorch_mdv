@@ -71,7 +71,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--full_checkpoint_path",
         default="/home/mvries/Documents/GitHub/pointMLP-pytorch/"
-                "pointmlpelite_foldingTearingVersion_autoencoder_allparams.pt",
+                "pointmlpelite_foldingTearingVersion_autoencoder_allparams1024RotationToken.pt",
         type=str,
     )
 
@@ -112,18 +112,18 @@ if __name__ == "__main__":
     model = MLPAutoencoder(encoder=net.module, decoder=decoder).cuda()
 
     checkpoint = torch.load(full_checkpoint_path)
-    model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
-    for k in checkpoint["model_state_dict"]:
-
-        if k in model_dict:
-            model_dict[k] = checkpoint["model_state_dict"][k]
-            print("    Found weight: " + k)
-        elif k.replace("folding1", "folding") in model_dict:
-            model_dict[k.replace("folding1", "folding")] = checkpoint[
-                "model_state_dict"
-            ][k]
-            print("    Found weight: " + k)
-    # model.load_state_dict(torch.load(full_checkpoint_path)['model_state_dict'])
+    # model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
+    # for k in checkpoint["model_state_dict"]:
+    # 
+    #     if k in model_dict:
+    #         model_dict[k] = checkpoint["model_state_dict"][k]
+    #         print("    Found weight: " + k)
+    #     elif k.replace("folding1", "folding") in model_dict:
+    #         model_dict[k.replace("folding1", "folding")] = checkpoint[
+    #             "model_state_dict"
+    #         ][k]
+    #         print("    Found weight: " + k)
+    model.load_state_dict(torch.load(full_checkpoint_path)['model_state_dict'])
 
     data = torch.rand(2, 3, 1024).cuda()
     print("===> testing pointMLP ...")

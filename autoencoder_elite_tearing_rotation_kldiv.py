@@ -79,13 +79,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--fold_ckpt_path",
-        default="/home/mvries/Documents/GitHub/FoldingNetNew/nets/FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_train_bothTrue_003.pt",
+        default="/home/mvries/Documents/GitHub/FoldingNetNew/nets/"
+                "FoldingNetNew_50feats_planeshape_foldingdecoder_trainallTrue_centringonlyTrue_train_bothTrue_003.pt",
         type=str,
     )
     parser.add_argument(
         "--full_checkpoint_path",
         default="/home/mvries/Documents/GitHub/pointMLP-pytorch/"
-                "pointmlpelite_foldingTearingVersion_autoencoder_allparams.pt",
+                "pointmlpelite_foldingTearingVersion_autoencoder_allparams1024VAE.pt",
         type=str,
     )
 
@@ -126,18 +127,18 @@ if __name__ == "__main__":
     model = MLPVariationalAutoencoder(encoder=net.module, decoder=decoder).cuda()
 
     checkpoint = torch.load(full_checkpoint_path)
-    model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
-    for k in checkpoint["model_state_dict"]:
-
-        if k in model_dict:
-            model_dict[k] = checkpoint["model_state_dict"][k]
-            print("    Found weight: " + k)
-        elif k.replace("folding1", "folding") in model_dict:
-            model_dict[k.replace("folding1", "folding")] = checkpoint[
-                    "model_state_dict"
-            ][k]
-            print("    Found weight: " + k)
-    # model.load_state_dict(torch.load(full_checkpoint_path)['model_state_dict'])
+    # model_dict = model.state_dict()  # load parameters from pre-trained FoldingNet
+    # for k in checkpoint["model_state_dict"]:
+    # 
+    #     if k in model_dict:
+    #         model_dict[k] = checkpoint["model_state_dict"][k]
+    #         print("    Found weight: " + k)
+    #     elif k.replace("folding1", "folding") in model_dict:
+    #         model_dict[k.replace("folding1", "folding")] = checkpoint[
+    #                 "model_state_dict"
+    #         ][k]
+    #         print("    Found weight: " + k)
+    model.load_state_dict(torch.load(full_checkpoint_path)['model_state_dict'])
 
     data = torch.rand(2, 3, 1024).cuda()
     print("===> testing pointMLP ...")
@@ -146,7 +147,7 @@ if __name__ == "__main__":
     print(embedding.shape)
 
     batch_size = 16
-    learning_rate = 0.00001
+    learning_rate = 0.000001
     dataset = PointCloudDatasetAllBothKLDivergranceRotation1024(
         df,
         root_dir,
