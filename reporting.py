@@ -10,8 +10,8 @@ def get_model_name(model):
     return model_name
 
 
-def get_experiment_name(model, output_dir):
-    model_name = get_model_name(model)
+def get_experiment_name(model_name, output_dir):
+    # model_name = get_model_name(model)
     dirs = [output_dir + "runs", output_dir + "reports", output_dir + "nets"]
     list(map(lambda x: os.makedirs(x, exist_ok=True), dirs))
     reports_list = sorted(os.listdir(output_dir + "reports"), reverse=True)

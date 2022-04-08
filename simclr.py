@@ -3,7 +3,7 @@ from torch import nn
 import classification_ModelNet40.models as models
 import torch.backends.cudnn as cudnn
 from classification_ScanObjectNN.models import pointMLPElite
-
+from datetime import datetime
 # from cell_dataset import PointCloudDatasetAllBoth
 from torch.utils.data import DataLoader
 import numpy as np
@@ -11,11 +11,13 @@ import pandas as pd
 from foldingnet import ReconstructionNet, ChamferLoss
 from angle_loss import AngleLoss
 from dataset import SimCLR1024Both
+import logging
 
 import argparse
 import os
 from tearing.folding_decoder import FoldingNetBasicDecoder
 from nt_xent import NT_Xent
+from reporting import get_experiment_name
 
 
 class Identity(nn.Module):
@@ -89,8 +91,9 @@ if __name__ == "__main__":
     pmlp_ckpt_path = args.pmlp_ckpt_path
     fold_ckpt_path = args.fold_ckpt_path
     full_checkpoint_path = args.full_checkpoint_path
+    output_dir = output_path
 
-    name_net = output_path + "pointmlpelite_simclr"
+    model_name = output_path + "pointmlpelite_simclr"
     print("==> Building encoder...")
     net = pointMLPElite(num_classes=15)
     device = "cuda"
@@ -114,7 +117,7 @@ if __name__ == "__main__":
     # print(h_i.shape)
     # print(z_i.shape)
 
-    batch_size = 50
+    batch_size = 57
     learning_rate = 0.00003 * batch_size / 100
     dataset = SimCLR1024Both(
         df,
@@ -133,8 +136,11 @@ if __name__ == "__main__":
         betas=(0.9, 0.999),
         weight_decay=1e-8,
     )
-    criterion = NT_Xent(50, 0.5, 1)
-
+    criterion = NT_Xent(batch_size, 0.5, 1)
+    
+    name_logging, name_model, name_writer, name = get_experiment_name(
+        model_name=model_name, output_dir=output_dir
+    )
     total_loss = 0.0
     rec_loss = 0.0
     clus_loss = 0.0
@@ -212,7 +218,7 @@ if __name__ == "__main__":
                 + " at epoch {}".format(epoch)
             )
             logging.info(f"Saving model to {name_model} with loss = {best_loss}.")
-            torch.save(checkpoint, name_net + ".pt")
+            torch.save(checkpoint, name_model)
             print("epoch [{}/{}], loss:{}".format(epoch + 1, num_epochs, total_loss))
 
         print(
