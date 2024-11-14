@@ -517,7 +517,7 @@ def pointMLPElite(num_classes=40, points=2048, **kwargs) -> Model:
 
 
 if __name__ == "__main__":
-    data = torch.rand(2, 3, 1024)
+    data = torch.rand(2, 3, 2048)
     print("===> testing pointMLP ...")
     model = pointMLP()
     out = model(data)

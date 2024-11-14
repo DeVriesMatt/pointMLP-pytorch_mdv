@@ -458,6 +458,23 @@ class Model(nn.Module):
             nn.Dropout(0.5),
             nn.Linear(256, self.class_num),
         )
+        self.node_classifier = nn.Sequential(
+            nn.Linear(last_channel, 512),
+            nn.BatchNorm1d(512),
+            self.act,
+            nn.Dropout(0.5),
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
+            self.act,
+            nn.Dropout(0.5),
+            nn.Linear(256, self.class_num),
+        )
+        self.attention_head = nn.Sequential(
+            nn.Linear(512, 8),
+            nn.Tanh(),
+            nn.Linear(8, 1),
+            nn.Sigmoid(),
+        )
 
     def forward(self, x):
         xyz = x.permute(0, 2, 1)
@@ -470,6 +487,8 @@ class Model(nn.Module):
             )  # [b,g,3]  [b,g,k,d]
             x = self.pre_blocks_list[i](x)  # [b,d,g]
             x = self.pos_blocks_list[i](x)  # [b,d,g]
+
+        print(x.shape)
 
         x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)
         x = self.classifier(x)

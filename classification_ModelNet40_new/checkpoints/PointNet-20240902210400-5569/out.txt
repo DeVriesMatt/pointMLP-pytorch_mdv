@@ -1,0 +1,4 @@
+args: Namespace(checkpoint='checkpoints/PointNet-20240902210400-5569', msg=None, batch_size=32, model='PointNet', epoch=300, num_points=1024, learning_rate=0.1, min_lr=0.005, weight_decay=0.0002, seed=5569, workers=8)
+==> Building model..
+==> Preparing data..
+Epoch(1/300) Learning Rate 0.1:

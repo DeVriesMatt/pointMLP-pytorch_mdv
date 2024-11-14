@@ -80,7 +80,7 @@ pip install pointnet2_ops_lib/.
 
 By default, it will create a fold named "checkpoints/{modelName}-{msg}-{randomseed}", which includes args.txt, best_checkpoint.pth, last_checkpoint.pth, log.txt, out.txt.
 ```bash
-cd pointMLP-pytorch/classification_ModelNet40
+cd pointMLP-pytorch/classification_ModelNet40_new
 # train pointMLP
 python main.py --model pointMLP
 # train pointMLP-elite

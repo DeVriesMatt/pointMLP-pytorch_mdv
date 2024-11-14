@@ -1,0 +1,11 @@
+checkpoint:	 checkpoints/PointNet-20240902210617-8446
+msg:	 None
+batch_size:	 32
+model:	 PointNet
+epoch:	 300
+num_points:	 1024
+learning_rate:	 0.1
+min_lr:	 0.005
+weight_decay:	 0.0002
+seed:	 8446
+workers:	 8
