@@ -81,7 +81,7 @@ def main():
     printf(f"args: {args}")
     printf('==> Building model..')
     # net = models.__dict__[args.model]()
-    net = models.pointMLP()
+    net = models.pointMLPElite()
     criterion = cal_loss
     net = net.to(device)
     # criterion = criterion.to(device)

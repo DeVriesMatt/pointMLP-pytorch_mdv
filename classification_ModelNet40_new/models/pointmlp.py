@@ -286,7 +286,7 @@ class Model(nn.Module):
     def __init__(self, points=1024, class_num=40, embed_dim=64, groups=1, res_expansion=1.0,
                  activation="relu", bias=True, use_xyz=True, normalize="center",
                  dim_expansion=[2, 2, 2, 2], pre_blocks=[2, 2, 2, 2], pos_blocks=[2, 2, 2, 2],
-                 k_neighbors=[32, 32, 32, 32], reducers=[2, 2, 2, 2], **kwargs):
+                 k_neighbors=[32, 32, 32, 32], reducers=[2, 2, 2, 2], pooling='attention', **kwargs):
         super(Model, self).__init__()
         self.stages = len(pre_blocks)
         self.class_num = class_num
@@ -322,7 +322,10 @@ class Model(nn.Module):
             last_channel = out_channel
 
         self.act = get_activation(activation)
-        self.classifier = nn.Sequential(
+        self.pooling = pooling
+
+        if self.pooling == 'attention':
+            self.classifier = nn.Sequential(
             nn.Linear(last_channel, 512),
             nn.BatchNorm1d(512),
             self.act,
@@ -332,7 +335,28 @@ class Model(nn.Module):
             self.act,
             nn.Dropout(0.5),
             nn.Linear(256, self.class_num)
+            )
+        else:
+            self.classifier = nn.Sequential(
+            nn.Linear(last_channel, 512),
+            nn.BatchNorm1d(1024),
+            self.act,
+            nn.Dropout(0.5),
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(1024),
+            self.act,
+            nn.Dropout(0.5),
+            nn.Linear(256, self.class_num)
+            )
+
+
+        self.attention_head = nn.Sequential(
+            nn.Linear(last_channel, 8),
+            nn.Tanh(),
+            nn.Linear(8, 1),
+            nn.Sigmoid(),
         )
+        print(self.pooling)
 
     def forward(self, x):
         xyz = x.permute(0, 2, 1)
@@ -344,17 +368,36 @@ class Model(nn.Module):
             x = self.pre_blocks_list[i](x)  # [b,d,g]
             x = self.pos_blocks_list[i](x)  # [b,d,g]
 
+        features = x
+        attention_weights = self.attention_head(features.transpose(2, 1))
 
-        x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)
-        x = self.classifier(x)
-        return x
+        if self.pooling == 'additive':
+            weighted_instance_features = features.transpose(2, 1) * attention_weights
+            instance_logits = self.classifier(weighted_instance_features)
+            bag_logits = torch.mean(instance_logits, dim=1)
+
+        elif self.pooling == 'conjunctive':
+            instance_logits = self.classifier(features.transpose(2, 1))
+            weighted_instance_logits = instance_logits * attention_weights
+            bag_logits = torch.mean(weighted_instance_logits, dim=1)
+
+        elif self.pooling == 'instance':
+            instance_logits = self.classifier(features.transpose(2, 1))
+            bag_logits = torch.mean(instance_logits, dim=1)
+
+        elif self.pooling == 'attention':
+            bag_embedding = torch.mean(features.transpose(2, 1) * attention_weights, dim=1)
+            bag_logits = self.classifier(bag_embedding)
+
+
+        return bag_logits
 
 
 class ModelMIL(nn.Module):
     def __init__(self, points=1024, class_num=40, embed_dim=64, groups=1, res_expansion=1.0,
                  activation="relu", bias=True, use_xyz=True, normalize="center",
                  dim_expansion=[2, 2, 2, 2], pre_blocks=[2, 2, 2, 2], pos_blocks=[2, 2, 2, 2],
-                 k_neighbors=[32, 32, 32, 32], reducers=[1, 1, 1, 1], **kwargs):
+                 k_neighbors=[32, 32, 32, 32], reducers=[1, 1, 1, 1], pooling = 'additive', **kwargs):
         super(ModelMIL, self).__init__()
         self.stages = len(pre_blocks)
         self.class_num = class_num
@@ -390,7 +433,11 @@ class ModelMIL(nn.Module):
             last_channel = out_channel
 
         self.act = get_activation(activation)
-        self.classifier = nn.Sequential(
+        
+        self.pooling = pooling
+
+        if self.pooling == 'attention':
+            self.classifier = nn.Sequential(
             nn.Linear(last_channel, 512),
             nn.BatchNorm1d(512),
             self.act,
@@ -400,6 +447,26 @@ class ModelMIL(nn.Module):
             self.act,
             nn.Dropout(0.5),
             nn.Linear(256, self.class_num)
+            )
+        else:
+            self.classifier = nn.Sequential(
+            nn.Linear(last_channel, 512),
+            nn.BatchNorm1d(1024),
+            self.act,
+            nn.Dropout(0.5),
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(1024),
+            self.act,
+            nn.Dropout(0.5),
+            nn.Linear(256, self.class_num)
+            )
+
+
+        self.attention_head = nn.Sequential(
+            nn.Linear(last_channel, 8),
+            nn.Tanh(),
+            nn.Linear(8, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -413,10 +480,28 @@ class ModelMIL(nn.Module):
             x = self.pos_blocks_list[i](x)  # [b,d,g]
 
         features = x
-        x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)
-        x = self.classifier(x)
+        attention_weights = attention(features.transpose(2, 1))
 
-        return x, features.transpose(2, 1), xyz
+        if self.pooling == 'additive':
+            weighted_instance_features = features.transpose(2, 1) * attention_weights
+            instance_logits = self.classifier(weighted_instance_features)
+            bag_logits = torch.mean(instance_logits, dim=1)
+
+        elif self.pooling == 'conjunctive':
+            instance_logits = self.classifier(features.transpose(2, 1))
+            weighted_instance_logits = instance_logits * attention_weights
+            bag_logits = torch.mean(weighted_instance_logits, dim=1)
+
+        elif self.pooling == 'instance':
+            instance_logits = self.classifier(features.transpose(2, 1))
+            bag_logits = torch.mean(instance_logits, dim=1)
+
+        elif self.pooling == 'attention':
+            bag_embedding = torch.mean(features.transpose(2, 1) * attention_weights, dim=1)
+            bag_logits = self.classifier(weighted_instance_features)
+
+
+        return bag_logits, features.transpose(2, 1), xyz
 
 def pointMLP(num_classes=40, **kwargs) -> Model:
     return Model(points=1024, class_num=num_classes, embed_dim=64, groups=1, res_expansion=1.0,
