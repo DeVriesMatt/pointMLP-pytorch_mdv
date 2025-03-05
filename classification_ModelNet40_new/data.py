@@ -78,6 +78,174 @@ class ModelNet40(Dataset):
         return self.data.shape[0]
 
 
+import glob
+import os
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+import pandas as pd
+
+
+def random_scale(point_data, scale_low=0.8, scale_high=1.2):
+    """Randomly scale the point cloud. Scale is per point cloud.
+    Input:
+        Nx3 array, original batch of point clouds
+    Return:
+        Nx3 array, scaled batch of point clouds
+    """
+    scale = np.random.uniform(low=scale_low, high=scale_high, size=[3])
+    scaled_pointcloud = np.multiply(point_data, scale).astype("float32")
+    return scaled_pointcloud
+
+
+def translate_pointcloud(pointcloud):
+    shift = np.random.uniform(low=-0.2, high=0.2, size=[3])
+    translated_pointcloud = np.add(pointcloud, shift).astype("float32")
+    return translated_pointcloud
+
+
+class Intra3D(Dataset):
+    def __init__(
+        self,
+        points_dir="/data/scratch/DBI/DUDBI/DYNCESYS/mvries/Datasets/IntrA/",
+        train_mode="train",
+        cls_state=True,
+        npoints=1024,
+        data_aug=True,
+        choice=1,
+    ):
+        self.npoints = npoints  # 2048 pts
+        self.data_augmentation = data_aug
+        self.datapath = []
+        self.label = {}
+        self.cls_state = cls_state
+        self.train_mode = train_mode
+        fold_csv = pd.read_csv(points_dir + f"folds/fold_{choice}.csv")
+
+        if self.cls_state:
+            self.label[0] = glob.glob(
+                points_dir + "generated/vessel/ad/" + "*.ad"
+            )  # label 0: healthy; 1694 files; negSplit
+            self.label[1] = glob.glob(
+                points_dir + "generated/aneurysm/ad/" + "*.ad"
+            ) + glob.glob(
+                points_dir + "annotated/ad/" + "*.ad"
+            )  # label 1: unhealthy; 331 files
+
+            train_set = [
+                points_dir + i.split("IntrA/")[-1]
+                for i in fold_csv[fold_csv["Split"] == "train"]["Path"].tolist()
+            ]
+            val_set = [
+                points_dir + i.split("IntrA/")[-1]
+                for i in fold_csv[fold_csv["Split"] == "validation"]["Path"].tolist()
+            ]
+            train_set = train_set + val_set
+            test_set = [
+                points_dir + i.split("IntrA/")[-1]
+                for i in fold_csv[fold_csv["Split"] == "test"]["Path"].tolist()
+            ]
+        else:
+
+            annotated = glob.glob(points_dir + "annotated/ad/" + "*.ad")
+            train_set = [
+                points_dir + i.split("IntrA/")[-1]
+                for i in fold_csv[fold_csv["Split"] == "train"]["Path"].tolist()
+                if points_dir + i.split("IntrA/")[-1] in annotated
+            ]
+            val_set = [
+                points_dir + i.split("IntrA/")[-1]
+                for i in fold_csv[fold_csv["Split"] == "validation"]["Path"].tolist()
+                if points_dir + i.split("IntrA/")[-1] in annotated
+            ]
+            train_set = train_set + val_set
+            test_set = [
+                points_dir + i.split("IntrA/")[-1]
+                for i in fold_csv[fold_csv["Split"] == "test"]["Path"].tolist()
+                if points_dir + i.split("IntrA/")[-1] in annotated
+            ]
+            non_annotated = [
+                points_dir + i.split("IntrA/")[-1]
+                for i in fold_csv["Path"].tolist()
+                if points_dir + i.split("IntrA/")[-1] not in annotated
+            ]
+
+            # train_set = [i.split("/")[-1] for i in fold_csv[fold_csv['Split'] == 'train']['Path'].tolist()]
+            # val_set = [i.split("/")[-1] for i in fold_csv[fold_csv['Split'] == 'validation']['Path'].tolist()]
+            # train_set = train_set + val_set
+            # test_set = [i.split("/")[-1] for i in fold_csv[fold_csv['Split'] == 'test']['Path'].tolist()]
+
+        if self.train_mode == "train":
+            self.datapath = train_set
+
+        elif self.train_mode == "test":
+            self.datapath = test_set
+
+        elif self.train_mode == "all":
+            self.datapath = train_set + test_set
+
+        elif self.train_mode == "interpret":
+            self.datapath = annotated
+
+        elif self.train_mode == "non_annotated":
+            self.datapath = non_annotated
+
+        else:
+            print("Error")
+            raise Exception("training mode invalid")
+
+    def __len__(self):
+        return len(self.datapath)
+
+    def __getitem__(self, index):
+        curr_file = self.datapath[index]
+        cls = None
+        if self.cls_state:
+
+            if curr_file in self.label[0]:
+                cls = torch.from_numpy(np.array([0]).astype(np.int64))
+
+            elif curr_file in self.label[1]:
+                cls = torch.from_numpy(np.array([1]).astype(np.int64))
+            else:
+                print("Error found!!!")
+                exit(-1)
+
+        point_set = np.loadtxt(curr_file)[:, :-1].astype(
+            np.float32
+        )  # [x, y, z, norm_x, norm_y, norm_z]
+        seg = np.loadtxt(curr_file)[:, -1].astype(np.int64)  # [seg_label]
+        seg[np.where(seg == 2)] = 1  # making boundary lines (label 2) to A. (label 1)
+
+        # random choice
+        if point_set.shape[0] < self.npoints:
+            choice = np.random.choice(point_set.shape[0], self.npoints, replace=True)
+        else:
+            choice = np.random.choice(point_set.shape[0], self.npoints, replace=False)
+        point_set = point_set[choice, :]
+        seg = seg[choice]
+
+        # normalization to unit ball
+        point_set[:, :3] = point_set[:, :3] - np.mean(
+            point_set[:, :3], axis=0
+        )  # x, y, z
+        dist = np.max(np.sqrt(np.sum(point_set[:, :3] ** 2, axis=1)), 0)
+        point_set[:, :3] = point_set[:, :3] / dist
+
+        # data augmentation
+        if self.data_augmentation:
+            if self.train_mode == "train":
+                point_set[:, :3] = random_scale(point_set[:, :3])
+                point_set[:, :3] = translate_pointcloud(point_set[:, :3])
+            if self.train_mode == "test":
+                point_set[:, :3] = point_set[:, :3]
+
+        point_set = torch.from_numpy(point_set)
+        seg = torch.from_numpy(seg)
+        return (point_set, seg, np.array([1])) if not self.cls_state else (point_set, cls)
+
+
+
 if __name__ == '__main__':
     train = ModelNet40(1024)
     test = ModelNet40(1024, 'test')
@@ -94,3 +262,6 @@ if __name__ == '__main__':
     test_set = ModelNet40(partition='test', num_points=1024)
     print(f"train_set size {train_set.__len__()}")
     print(f"test_set size {test_set.__len__()}")
+
+
+

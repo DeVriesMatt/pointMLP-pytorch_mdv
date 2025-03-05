@@ -15,7 +15,7 @@ import torch.utils.data.distributed
 from torch.utils.data import DataLoader
 import models as models
 from utils import Logger, mkdir_p, progress_bar, save_model, save_args, cal_loss
-from data import ModelNet40
+from data import ModelNet40, Intra3D
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import sklearn.metrics as metrics
 import numpy as np
@@ -36,6 +36,7 @@ def parse_args():
     parser.add_argument('--weight_decay', type=float, default=2e-4, help='decay rate')
     parser.add_argument('--seed', type=int, help='random seed')
     parser.add_argument('--workers', default=8, type=int, help='workers')
+    parser.add_argument('--pooling', default='additive', type=str, help='workers')
     return parser.parse_args()
 
 
@@ -81,7 +82,7 @@ def main():
     printf(f"args: {args}")
     printf('==> Building model..')
     # net = models.__dict__[args.model]()
-    net = models.pointMLPElite()
+    net = models.pointMLPElite(pooling=args.pooling, num_classes=2)
     criterion = cal_loss
     net = net.to(device)
     # criterion = criterion.to(device)
@@ -120,10 +121,15 @@ def main():
         optimizer_dict = checkpoint['optimizer']
 
     printf('==> Preparing data..')
-    train_loader = DataLoader(ModelNet40(partition='train', num_points=args.num_points), num_workers=args.workers,
+    #train_loader = DataLoader(ModelNet40(partition='train', num_points=args.num_points), num_workers=args.workers,
+     #                         batch_size=args.batch_size, shuffle=True, drop_last=True)
+    train_loader = DataLoader(Intra3D(train_mode='train', npoints=args.num_points), num_workers=args.workers,
                               batch_size=args.batch_size, shuffle=True, drop_last=True)
-    test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points), num_workers=args.workers,
-                             batch_size=args.batch_size // 2, shuffle=False, drop_last=False)
+    test_loader = DataLoader(Intra3D(test_mode='train', npoints=args.num_points), num_workers=args.workers,
+                              batch_size=args.batch_size, shuffle=False, drop_last=False)
+
+    #test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points), num_workers=args.workers,
+      #                       batch_size=args.batch_size // 2, shuffle=False, drop_last=False)
 
     optimizer = torch.optim.SGD(net.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=args.weight_decay)
     if optimizer_dict is not None:
